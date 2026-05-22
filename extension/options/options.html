@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Engram — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+      font-weight: 500;
+      background: #e2e2df;
+      color: #070607;
+      min-height: 100vh;
+    }
+
+    .page {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 500;
+      color: #070607;
+      letter-spacing: 0.2px;
+    }
+
+    .logo-hex { color: #fc5000; }
+
+    .subtitle {
+      font-size: 14px;
+      color: #070607;
+      opacity: 0.4;
+    }
+
+    /* Section card */
+    .section {
+      background: #f7f6f2;
+      border-radius: 40px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      color: #070607;
+      opacity: 0.45;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* Mode options */
+    .mode-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .mode-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 20px;
+      background: #e2e2df;
+      border-radius: 24px;
+      border: 1.5px solid transparent;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .mode-option.selected {
+      border-color: #fc5000;
+      background: #fff9f6;
+    }
+
+    .mode-option input[type="radio"] {
+      margin-top: 3px;
+      accent-color: #fc5000;
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    .mode-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #070607;
+      line-height: 1.25;
+    }
+
+    .mode-desc {
+      font-size: 13px;
+      color: #070607;
+      opacity: 0.55;
+      margin-top: 4px;
+      line-height: 1.45;
+    }
+
+    /* API key */
+    .key-section {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .key-section.visible { display: flex; }
+
+    .key-label {
+      font-size: 12px;
+      color: #070607;
+      opacity: 0.5;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .key-input-wrap {
+      display: flex;
+      gap: 10px;
+    }
+
+    .key-input-wrap input {
+      flex: 1;
+      background: #e2e2df;
+      border: 1.5px solid #070607;
+      color: #070607;
+      padding: 12px 20px;
+      border-radius: 100px;
+      font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .key-input-wrap input::placeholder { opacity: 0.35; }
+
+    .key-input-wrap input:focus { border-color: #fc5000; }
+
+    .btn-toggle {
+      background: #e2e2df;
+      border: 1.5px solid #070607;
+      color: #070607;
+      padding: 12px 18px;
+      border-radius: 100px;
+      font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+
+    .btn-toggle:hover { opacity: 0.7; }
+
+    .key-note {
+      font-size: 12px;
+      color: #070607;
+      opacity: 0.45;
+      line-height: 1.5;
+      padding: 0 4px;
+    }
+
+    /* Save button */
+    .btn-save {
+      background: #fc5000;
+      color: #ffffff;
+      border: none;
+      padding: 14px 24px;
+      border-radius: 800px;
+      font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      width: 100%;
+      letter-spacing: 0.1px;
+    }
+
+    .btn-save:hover { opacity: 0.85; }
+    .btn-save:active { opacity: 0.7; }
+
+    /* Status */
+    .status {
+      font-size: 13px;
+      text-align: center;
+      min-height: 20px;
+      color: transparent;
+      line-height: 1.4;
+    }
+
+    .status.success { color: #2a7a2a; }
+    .status.error   { color: #fc5000; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="header">
+      <span class="logo"><span class="logo-hex">⬡</span> Engram</span>
+      <span class="subtitle">Settings</span>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Handoff Generation</div>
+
+      <div class="mode-group">
+        <label class="mode-option" id="optDemo">
+          <input type="radio" name="mode" value="demo" />
+          <div>
+            <div class="mode-name">Demo Mode</div>
+            <div class="mode-desc">Handoff generated via the Engram server using Gemini. No setup required.</div>
+          </div>
+        </label>
+
+        <label class="mode-option" id="optOwnKey">
+          <input type="radio" name="mode" value="own-key" />
+          <div>
+            <div class="mode-name">Own API Key</div>
+            <div class="mode-desc">Direct call to Gemini API using your key. Nothing is sent to Engram servers.</div>
+          </div>
+        </label>
+      </div>
+
+      <div class="key-section" id="keySection">
+        <div class="key-label">Gemini API Key</div>
+        <div class="key-input-wrap">
+          <input type="password" id="apiKey" placeholder="AIzaSy..." autocomplete="off" spellcheck="false" />
+          <button class="btn-toggle" id="btnToggleKey" type="button">Show</button>
+        </div>
+        <div class="key-note">🔒 Stored only in your browser's local storage. Never sent to Engram servers or any third party.</div>
+      </div>
+    </div>
+
+    <button class="btn-save" id="btnSave">Save Settings</button>
+    <div class="status" id="status"></div>
+
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

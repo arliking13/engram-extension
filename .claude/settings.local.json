@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:\\\\Users\\\\temir\\\\Documents\\\\Web_Projects\\\\AI_Knowledge_Base\\\\inbox\")",
+      "Read(//c/Users/temir/Documents/Web_Projects/AI_Knowledge_Base/inbox/**)",
+      "Read(//c/Users/temir/Documents/Web_Projects/AI_Knowledge_Base/**)",
+      "Bash(python scripts/kb.py process)"
+    ]
+  }
+}
