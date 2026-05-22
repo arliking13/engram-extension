@@ -15,51 +15,110 @@
       <span class="version">v0.1</span>
     </div>
 
-    <!-- Health Score -->
-    <div class="health-section">
-      <div class="health-bar-wrap">
-        <div class="health-bar" id="healthBar"></div>
-      </div>
-      <div class="health-meta">
-        <span id="healthLabel">Checking...</span>
-        <span id="healthScore">--</span>
+    <!-- Platform Bar -->
+    <div class="platform-bar">
+      <svg class="platform-icon" id="platformIcon" viewBox="0 0 24 24" width="16" height="16">
+        <path d="M12 2 L15 8 L22 9 L17 14 L18 21 L12 18 L6 21 L7 14 L2 9 L9 8 Z" fill="currentColor"/>
+      </svg>
+      <span id="platformName">Claude</span>
+      <span class="platform-chat-title" id="chatTitle">—</span>
+    </div>
+
+    <!-- STATE 1: Idle -->
+    <div id="idleView" style="display: none;" class="view">
+      <p class="idle-hint">Scan to analyze this chat</p>
+      <button id="btnScan" class="btn btn-primary">⟳ Scan Chat</button>
+    </div>
+
+    <!-- STATE 2: Scanning -->
+    <div id="scanningView" style="display: none;" class="view">
+      <p id="scanCount" class="scanning-label">⟳ Scanning... 0 messages found</p>
+      <div class="progress-wrap">
+        <div id="scanProgress" class="progress-bar" style="width: 0%"></div>
       </div>
     </div>
 
-    <!-- Stats -->
-    <div class="stats">
-      <div class="stat">
-        <span class="stat-value" id="msgCount">0</span>
-        <span class="stat-label">Messages</span>
-      </div>
-      <div class="stat">
-        <span class="stat-value" id="codeCount">0</span>
-        <span class="stat-label">Code blocks</span>
-      </div>
-      <div class="stat">
-        <span class="stat-value" id="handoffCount">0</span>
-        <span class="stat-label">Handoffs</span>
-      </div>
-    </div>
+    <!-- STATE 3: Done / Live -->
+    <div id="doneView" style="display: none;" class="view">
 
-    <!-- Project -->
-    <div class="project-section">
-      <span class="section-label">Project</span>
-      <span class="project-name" id="projectName">No active project</span>
-    </div>
+      <!-- Speedometer Gauge -->
+      <div class="gauge-container">
+        <svg viewBox="0 0 200 110" width="200" height="110">
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#ef4444"/>
+              <stop offset="25%" style="stop-color:#f97316"/>
+              <stop offset="50%" style="stop-color:#f59e0b"/>
+              <stop offset="75%" style="stop-color:#84cc16"/>
+              <stop offset="100%" style="stop-color:#22c55e"/>
+            </linearGradient>
+          </defs>
 
-    <!-- Actions -->
-    <div class="actions">
-      <button class="btn btn-primary" id="btnHandoff">
+          <!-- Background arc (gray) -->
+          <path d="M 15 100 A 85 85 0 0 1 185 100"
+                fill="none" stroke="#e2e2df" stroke-width="20" stroke-linecap="round"/>
+
+          <!-- Colored gradient arc -->
+          <path d="M 15 100 A 85 85 0 0 1 185 100"
+                fill="none" stroke="url(#gaugeGrad)" stroke-width="20" stroke-linecap="round"/>
+
+          <!-- Zone labels -->
+          <text x="12" y="95" font-size="8" fill="#ef4444" font-family="DM Sans" text-anchor="middle">NO</text>
+          <text x="38" y="45" font-size="8" fill="#f97316" font-family="DM Sans" text-anchor="middle">LOW</text>
+          <text x="100" y="18" font-size="8" fill="#f59e0b" font-family="DM Sans" text-anchor="middle">MED</text>
+          <text x="162" y="45" font-size="8" fill="#84cc16" font-family="DM Sans" text-anchor="middle">HIGH</text>
+          <text x="188" y="95" font-size="8" fill="#22c55e" font-family="DM Sans" text-anchor="middle">MAX</text>
+
+          <!-- Needle group - rotates around center -->
+          <g id="gaugeNeedleGroup" style="transform-origin: 100px 100px; transform: rotate(-90deg); transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <line x1="100" y1="100" x2="100" y2="22" stroke="#070607" stroke-width="3" stroke-linecap="round"/>
+            <line x1="100" y1="100" x2="100" y2="108" stroke="#070607" stroke-width="3" stroke-linecap="round"/>
+          </g>
+
+          <!-- Center cap -->
+          <circle cx="100" cy="100" r="7" fill="#070607"/>
+          <circle cx="100" cy="100" r="4" fill="#f7f6f2"/>
+        </svg>
+        <div id="gaugeStatus" class="gauge-status">—</div>
+      </div>
+
+      <!-- Stats: YOU / AI / TOTAL / CODE -->
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-value" id="userCount">0</span>
+          <span class="stat-label">YOU</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value" id="aiCount">0</span>
+          <span class="stat-label">AI</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value" id="totalCount">0</span>
+          <span class="stat-label">TOTAL</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value" id="codeCount">0</span>
+          <span class="stat-label">CODE</span>
+        </div>
+      </div>
+
+      <!-- Generate Handoff -->
+      <button class="btn btn-primary" id="btnHandoff" title="Generate a handoff package to continue in a new chat">
         ⬡ Generate Handoff
       </button>
-      <button class="btn btn-secondary" id="btnNewProject">
-        + New Project
-      </button>
-    </div>
 
-    <!-- Status -->
-    <div class="status-bar" id="statusBar"></div>
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button class="btn btn-ghost" id="btnHistory" title="View all tracked chats">🕘 History</button>
+        <button class="btn btn-ghost" id="btnSettings" title="Engram settings (API mode)">⚙ Settings</button>
+        <button class="btn btn-ghost" id="btnExport" title="Download handoff as .md file">↓ Export</button>
+        <button class="btn btn-ghost btn-danger" id="btnClear" title="Clear current chat data">🗑</button>
+      </div>
+
+      <!-- Status -->
+      <div id="statusBar" class="status-bar"></div>
+
+    </div>
 
   </div>
   <script src="popup.js"></script>

@@ -14,9 +14,21 @@ Ship a demoable Engram extension flow:
 
 ## Next Up
 
-- [ ] Inspect current git status and extension source before editing.
-- [ ] Fix runtime messaging between content scripts and background worker.
-- [ ] Verify Firefox MV3 messaging uses Promise-compatible behavior.
+- [x] Inspect current git status and extension source before editing.
+- [x] Fix runtime messaging between content scripts and background worker.
+- [x] Verify Firefox MV3 Promise-compatible code paths with a local harness.
+- [x] Update Claude parser to use DOM MutationObserver capture as the primary path.
+- [x] Add user selector extraction for `[data-testid="user-message"]`.
+- [x] Add assistant action-button ancestor extraction and normalized dedupe.
+- [x] Add popup idle fallback rendering when `ENGRAM_GET_STATE` is null or unavailable.
+- [x] Guard popup done view from stale/null state polling after local scan completion.
+- [x] Fix Claude parser counting so repeated user messages are not globally deduped.
+- [x] Filter timestamp/date-only assistant candidates and internal thinking lines.
+- [x] Collapse doubled assistant text during assistant cleanup.
+- [ ] Verify popup opens with visible Scan Chat idle state in live Firefox.
+- [ ] Verify popup done view stays visible after Scan Chat in live Firefox.
+- [ ] Verify Claude scan counts are close to visible user/assistant message counts in live Firefox.
+- [ ] Verify the fixed messaging path in a live loaded Firefox extension.
 - [ ] Confirm Chrome MV3 behavior still works after messaging fixes.
 - [ ] Test Claude.ai MutationObserver capture on a live or representative DOM.
 - [ ] Confirm extracted messages/code blocks are stored under the correct project id.
@@ -25,7 +37,7 @@ Ship a demoable Engram extension flow:
 
 ## In Progress
 
-- [ ] Project continuity files added; source implementation has not changed yet.
+- [ ] Live Firefox extension validation after popup fallback and Claude parser DOM capture updates.
 
 ## Done
 
@@ -36,8 +48,8 @@ Ship a demoable Engram extension flow:
 
 ## Blocked Or Needs Verification
 
-- [ ] "No listener" runtime messaging issue needs reproduction details and fix.
-- [ ] Claude.ai DOM selectors need live verification because Claude.ai markup may change.
+- [ ] "No listener" runtime messaging issue needs live Firefox confirmation after the Promise-path fix.
+- [ ] Claude.ai DOM selectors need live Firefox verification with current `user-message` and action-bar selectors.
 - [ ] Current browser compatibility layer needs review before more feature work.
 
 ## Agent Update Rule

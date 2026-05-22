@@ -6,46 +6,62 @@
 import { Storage } from "../storage/storage.js";
 
 const storage = new Storage();
+const runtime = typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
+const isFirefox = typeof browser !== "undefined";
 
 // ── Message Router ──────────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const response = routeMessage(msg, sender);
+  if (!response) return false;
+
+  if (isFirefox) {
+    return response.catch((error) => ({ error: error.message || String(error) }));
+  }
+
+  response
+    .then(sendResponse)
+    .catch((error) => sendResponse({ error: error.message || String(error) }));
+  return true;
+});
+
+function routeMessage(msg, sender) {
   switch (msg.type) {
     case "ENGRAM_NEW_MESSAGES":
-      handleNewMessages(msg, sender);
-      break;
+      return handleNewMessages(msg, sender);
 
     case "ENGRAM_HEALTH_UPDATE":
-      handleHealthUpdate(msg, sender);
-      break;
+      return handleHealthUpdate(msg, sender);
+
+    case "ENGRAM_SCAN_COMPLETE":
+      return handleScanComplete(msg, sender);
 
     case "ENGRAM_GET_STATE":
-      handleGetState(sendResponse);
-      return true; // async
+      return handleGetState();
 
     case "ENGRAM_GENERATE_HANDOFF":
-      handleGenerateHandoff(msg, sendResponse);
-      return true; // async
+      return handleGenerateHandoff(msg);
 
     case "ENGRAM_NEW_PROJECT":
-      handleNewProject(msg, sendResponse);
-      return true;
+      return handleNewProject(msg);
 
     case "ENGRAM_LIST_PROJECTS":
-      handleListProjects(sendResponse);
-      return true;
+      return handleListProjects();
 
     case "ENGRAM_SWITCH_PROJECT":
-      handleSwitchProject(msg, sendResponse);
-      return true;
+      return handleSwitchProject(msg);
+
+    default:
+      return null;
   }
-});
+}
 
 // ── Handlers ────────────────────────────────────────────────────────────────
 
 async function handleNewMessages(msg, sender) {
   const session = await storage.getCurrentSession(sender.tab?.id);
   await storage.appendMessages(session.id, msg.messages);
+  return { ok: true };
 }
 
 async function handleHealthUpdate(msg, sender) {
@@ -57,42 +73,50 @@ async function handleHealthUpdate(msg, sender) {
     signals: msg.signals,
     updatedAt: Date.now(),
   });
+  return { ok: true };
 }
 
-async function handleGetState(sendResponse) {
+async function handleScanComplete(msg, sender) {
+  const session = await storage.getCurrentSession(sender.tab?.id);
+  if (msg.messages?.length) {
+    await storage.appendMessages(session.id, msg.messages);
+  }
+  return { ok: true };
+}
+
+async function handleGetState() {
   const session = await storage.getActiveSession();
   const health = await storage.getHealth(session?.id);
   const messages = await storage.getMessages(session?.id);
-  sendResponse({ session, health, messageCount: messages.length });
+  return { session, health, messageCount: messages.length };
 }
 
-async function handleGenerateHandoff(msg, sendResponse) {
+async function handleGenerateHandoff(msg) {
   const session = await storage.getActiveSession();
   const messages = await storage.getMessages(session?.id);
 
   if (!messages.length) {
-    sendResponse({ error: "No messages to package" });
-    return;
+    return { error: "No messages to package" };
   }
 
   const handoff = buildHandoffPackage(messages, session);
   await storage.saveHandoff(session.id, handoff);
-  sendResponse({ handoff });
+  return { handoff };
 }
 
-async function handleNewProject(msg, sendResponse) {
+async function handleNewProject(msg) {
   const project = await storage.createProject(msg.name, msg.platform || "claude");
-  sendResponse({ project });
+  return { project };
 }
 
-async function handleListProjects(sendResponse) {
+async function handleListProjects() {
   const projects = await storage.listProjects();
-  sendResponse({ projects });
+  return { projects };
 }
 
-async function handleSwitchProject(msg, sendResponse) {
+async function handleSwitchProject(msg) {
   await storage.setActiveProject(msg.projectId);
-  sendResponse({ ok: true });
+  return { ok: true };
 }
 
 // ── Handoff Builder ─────────────────────────────────────────────────────────
