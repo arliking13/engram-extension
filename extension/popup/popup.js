@@ -443,13 +443,20 @@ function computeHealthFromScan(sr) {
   else                  action = "Move to a fresh chat now";
 
   const reasons = [];
-  if (totalMsgs >= 15 && chatSizePressure >= 15) reasons.push("This chat is getting long");
-  if (codeCount >= 5)                            reasons.push("There are many code blocks");
-  if (totalChars >= 20000)                       reasons.push("Important details may be buried above");
-  if (correctionCount >= 2)                      reasons.push("The conversation has changed direction several times");
-  if (scanDuration >= 500)                       reasons.push("Engram took longer than usual to scan this chat");
-  if (browserLoadPressure >= 25)                 reasons.push("The page is responding slower");
-  if (emptyMsgs >= 1)                            reasons.push("Some messages may not have been captured cleanly");
+  if (totalMsgs >= 80 || totalChars >= 80000 || chatSizePressure >= 60)
+    reasons.push("This chat is getting long");
+  if (codeCount >= 15)
+    reasons.push("There are many code blocks");
+  if (totalMsgs >= 120 || codeCount >= 30 || chatSizePressure >= 75 || migrationRisk === "High" || migrationRisk === "Critical")
+    reasons.push("Important details may be buried above");
+  if (correctionCount >= 2)
+    reasons.push("The conversation has changed direction several times");
+  if (scanDuration >= 500)
+    reasons.push("Engram took longer than usual to scan this chat");
+  if (browserLoadPressure >= 25)
+    reasons.push("The page is responding slower");
+  if (emptyMsgs >= 1)
+    reasons.push("Some messages may not have been captured cleanly");
 
   return {
     score,
