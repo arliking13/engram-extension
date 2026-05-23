@@ -1,22 +1,21 @@
 # Current Handoff
 
 Last active agent:
-Codex
+Claude Code (claude-sonnet-4-6)
 
 Current phase:
-Claude message normalization/count stabilization.
+Settings: Demo Mode endpoint constant + Custom Mode provider select.
 
 Current goal:
-Stabilize Engram MVP before adding new features.
+Demo Mode is now zero-input for judges — the Vercel endpoint is a built-in constant (DEMO_HANDOFF_ENDPOINT). Replace YOUR-VERCEL-APP with the real Vercel URL before Demo Day. Custom Mode now offers a Gemini/OpenAI provider select with a local API key field for personal use.
 
 Immediate focus:
-- Live Firefox validation of Claude message counts
-- Live Firefox extension validation of popup idle/scan rendering
-- Live Firefox extension validation of Claude DOM capture
-- Claude.ai parser validation
-- content script to background worker messaging
-- IndexedDB verification
-- popup health score verification
+- Replace YOUR-VERCEL-APP in `DEMO_HANDOFF_ENDPOINT` constant (popup.js line ~57) with the real deployed Vercel URL.
+- Deploy Vercel proxy backend: POST /api/handoff → Gemini 1.5 Flash. GEMINI_API_KEY lives in Vercel env vars only, never in the extension.
+- Load the extension in Firefox, scan a Claude chat, click Generate Handoff — should call DEMO_HANDOFF_ENDPOINT and copy AI-generated prompt to clipboard.
+- Verify Settings view stays open during 3-second polling (guard already in place).
+- Verify Scan Chat, Done view, Export, and Clear still work.
+- Live Firefox validation of Claude message counts (pending from prior passes).
 
 Important architectural constraints:
 - Do NOT rewrite the project structure.
@@ -32,7 +31,32 @@ Known risks:
 - Existing uncommitted source changes were present before this pass, including parser/popup changes.
 - AI-generated uncontrolled refactors
 
-What changed in this pass:
+Architecture note:
+Extension → Vercel API route → Gemini API. GEMINI_API_KEY lives only in Vercel environment variables. The extension stores the Vercel endpoint URL locally (browser.storage.local). In Custom Mode, the user's Gemini API key is stored locally only, and is only used to call a user-configured proxy endpoint — it is never logged or sent to Engram servers. No real API key is hardcoded anywhere in the extension.
+
+What changed in this pass (Demo Mode constant + Custom Mode provider select):
+- DEMO_HANDOFF_ENDPOINT constant added (placeholder URL, TODO comment).
+- isDemoEndpointPlaceholder() guard — tryAIHandoff() falls back immediately if constant not replaced.
+- Demo Mode panel no longer has a Vercel URL input. Shows a status line (#demoStatus) set by updateDemoStatus(): amber if placeholder, green if real URL.
+- Custom Mode panel: provider changed from static text to <select> (Gemini / OpenAI). Added API key security warning note.
+- saveSettings() clears customApiKey and customEndpoint when saving in Demo Mode — nothing sensitive stored.
+- DEFAULT_SETTINGS: demoEndpoint removed, provider renamed to customProvider.
+- inputDemoEndpoint element and its input event listener removed.
+- checkDemoEndpointWarning() removed; replaced by updateDemoStatus().
+- Privacy note updated: "No API keys are stored in the extension."
+
+What changed in prior pass (Settings / Demo Mode pass):
+- Settings guard added to loadState(): returns early if currentState === "settings" to prevent async polling from overwriting the view.
+- storageGet/storageSet helpers added for cross-browser storage.local access.
+- DEFAULT_SETTINGS and engramSettings runtime object added.
+- loadSettings(), applySettingsToUI(), updateModeToggle(), checkDemoEndpointWarning(), saveSettings() added to popup.js.
+- tryAIHandoff(): calls configured endpoint with POST { messages }, falls back on any failure.
+- btnHandoff updated: tries AI handoff first, then falls back to existing local/worker flow.
+- Settings HTML: AI Handoff Generation section with Demo/Custom mode toggle, Vercel URL input, Gemini API key (password) input, optional custom endpoint, Save button, disabled Test Connection placeholder.
+- CSS: mode-toggle, mode-btn, settings-input-group, settings-input, settings-warning, settings-action-row, btn-sm.
+- Logs: [Engram] settings loaded, settings saved, settings view kept, demo endpoint missing, handoff fallback used. Keys are never logged.
+
+What changed in prior passes:
 - Claude parser now uses per-DOM-node source keys for DOM-captured messages so repeated user text in separate bubbles is counted.
 - DOM extraction no longer globally dedupes messages by `role:text`.
 - Assistant timestamp/date-only candidates are filtered, including `HH:MM` and Russian date labels such as `21 мая`.

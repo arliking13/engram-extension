@@ -12,29 +12,35 @@
     <!-- Header -->
     <div class="header">
       <span class="logo">⬡ Engram</span>
-      <span class="version">v0.1</span>
+      <div class="header-right">
+        <span class="version">v0.1</span>
+        <button class="btn-icon" id="btnSettings" title="Settings">⚙</button>
+      </div>
     </div>
 
     <!-- Platform Bar -->
     <div class="platform-bar">
-      <svg class="platform-icon" id="platformIcon" viewBox="0 0 24 24" width="16" height="16">
+      <svg class="platform-icon" id="platformIcon" viewBox="0 0 24 24" width="13" height="13">
         <path d="M12 2 L15 8 L22 9 L17 14 L18 21 L12 18 L6 21 L7 14 L2 9 L9 8 Z" fill="currentColor"/>
       </svg>
-      <span id="platformName">Claude</span>
-      <span class="platform-chat-title" id="chatTitle">—</span>
+      <span id="platformName">—</span>
+      <span class="platform-chat-title" id="chatTitle"></span>
     </div>
 
     <!-- STATE 1: Idle -->
     <div id="idleView" style="display: none;" class="view">
-      <p class="idle-hint">Scan to analyze this chat</p>
+      <div class="idle-content">
+        <div class="idle-icon">⬡</div>
+        <p class="idle-hint">Scan to analyze this chat</p>
+      </div>
       <button id="btnScan" class="btn btn-primary">⟳ Scan Chat</button>
     </div>
 
     <!-- STATE 2: Scanning -->
     <div id="scanningView" style="display: none;" class="view">
-      <p id="scanCount" class="scanning-label">⟳ Scanning... 0 messages found</p>
+      <p id="scanCount" class="scanning-label">Scanning…</p>
       <div class="progress-wrap">
-        <div id="scanProgress" class="progress-bar" style="width: 0%"></div>
+        <div id="scanProgress" class="progress-bar" style="width: 30%"></div>
       </div>
     </div>
 
@@ -46,40 +52,43 @@
         <svg viewBox="0 0 200 110" width="200" height="110">
           <defs>
             <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" style="stop-color:#ef4444"/>
-              <stop offset="25%" style="stop-color:#f97316"/>
-              <stop offset="50%" style="stop-color:#f59e0b"/>
-              <stop offset="75%" style="stop-color:#84cc16"/>
+              <stop offset="0%"   style="stop-color:#ef4444"/>
+              <stop offset="25%"  style="stop-color:#f97316"/>
+              <stop offset="50%"  style="stop-color:#f59e0b"/>
+              <stop offset="75%"  style="stop-color:#84cc16"/>
               <stop offset="100%" style="stop-color:#22c55e"/>
             </linearGradient>
           </defs>
 
-          <!-- Background arc (gray) -->
+          <!-- Background arc -->
           <path d="M 15 100 A 85 85 0 0 1 185 100"
-                fill="none" stroke="#e2e2df" stroke-width="20" stroke-linecap="round"/>
+                fill="none" stroke="#1e1e1e" stroke-width="18" stroke-linecap="round"/>
 
           <!-- Colored gradient arc -->
           <path d="M 15 100 A 85 85 0 0 1 185 100"
-                fill="none" stroke="url(#gaugeGrad)" stroke-width="20" stroke-linecap="round"/>
+                fill="none" stroke="url(#gaugeGrad)" stroke-width="18"
+                stroke-linecap="round" opacity="0.9"/>
 
           <!-- Zone labels -->
-          <text x="12" y="95" font-size="8" fill="#ef4444" font-family="DM Sans" text-anchor="middle">NO</text>
-          <text x="38" y="45" font-size="8" fill="#f97316" font-family="DM Sans" text-anchor="middle">LOW</text>
-          <text x="100" y="18" font-size="8" fill="#f59e0b" font-family="DM Sans" text-anchor="middle">MED</text>
-          <text x="162" y="45" font-size="8" fill="#84cc16" font-family="DM Sans" text-anchor="middle">HIGH</text>
-          <text x="188" y="95" font-size="8" fill="#22c55e" font-family="DM Sans" text-anchor="middle">MAX</text>
+          <text x="13"  y="97" font-size="7.5" fill="#ef4444" font-family="system-ui" text-anchor="middle">NO</text>
+          <text x="38"  y="46" font-size="7.5" fill="#f97316" font-family="system-ui" text-anchor="middle">LOW</text>
+          <text x="100" y="19" font-size="7.5" fill="#f59e0b" font-family="system-ui" text-anchor="middle">MED</text>
+          <text x="162" y="46" font-size="7.5" fill="#84cc16" font-family="system-ui" text-anchor="middle">HIGH</text>
+          <text x="187" y="97" font-size="7.5" fill="#22c55e" font-family="system-ui" text-anchor="middle">MAX</text>
 
-          <!-- Needle group - rotates around center -->
+          <!-- Needle group — rotates around (100, 100) -->
           <g id="gaugeNeedleGroup" style="transform-origin: 100px 100px; transform: rotate(-90deg); transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);">
-            <line x1="100" y1="100" x2="100" y2="22" stroke="#070607" stroke-width="3" stroke-linecap="round"/>
-            <line x1="100" y1="100" x2="100" y2="108" stroke="#070607" stroke-width="3" stroke-linecap="round"/>
+            <line x1="100" y1="100" x2="100" y2="24" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="100" y1="100" x2="100" y2="108" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"/>
           </g>
 
           <!-- Center cap -->
-          <circle cx="100" cy="100" r="7" fill="#070607"/>
-          <circle cx="100" cy="100" r="4" fill="#f7f6f2"/>
+          <circle cx="100" cy="100" r="6"   fill="#1a1a1a" stroke="#333" stroke-width="1"/>
+          <circle cx="100" cy="100" r="3.5" fill="#a78bfa"/>
         </svg>
+
         <div id="gaugeStatus" class="gauge-status">—</div>
+        <div id="gaugeHint"   class="gauge-hint"></div>
       </div>
 
       <!-- Stats: YOU / AI / TOTAL / CODE -->
@@ -103,20 +112,125 @@
       </div>
 
       <!-- Generate Handoff -->
-      <button class="btn btn-primary" id="btnHandoff" title="Generate a handoff package to continue in a new chat">
+      <button class="btn btn-primary" id="btnHandoff"
+              title="Generate a handoff package to continue in a new chat">
         ⬡ Generate Handoff
       </button>
 
-      <!-- Action Buttons -->
+      <!-- Secondary Actions -->
       <div class="action-buttons">
-        <button class="btn btn-ghost" id="btnHistory" title="View all tracked chats">🕘 History</button>
-        <button class="btn btn-ghost" id="btnSettings" title="Engram settings (API mode)">⚙ Settings</button>
         <button class="btn btn-ghost" id="btnExport" title="Download handoff as .md file">↓ Export</button>
-        <button class="btn btn-ghost btn-danger" id="btnClear" title="Clear current chat data">🗑</button>
+        <button class="btn btn-ghost btn-danger" id="btnClear" title="Clear current chat data">🗑 Clear</button>
       </div>
 
-      <!-- Status -->
+      <!-- Status feedback -->
       <div id="statusBar" class="status-bar"></div>
+
+    </div>
+
+    <!-- STATE 4: Settings -->
+    <div id="settingsView" style="display: none;" class="view">
+
+      <div class="settings-header">
+        <button class="btn-back" id="btnBack">← Back</button>
+        <span class="settings-title">Settings</span>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Platforms</div>
+        <div class="settings-row">
+          <span class="settings-item-name">Claude.ai</span>
+          <span class="badge badge-active">Active</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-item-name">Gemini</span>
+          <span class="badge badge-soon">Coming soon</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Export</div>
+        <div class="settings-row">
+          <span class="settings-item-name">Format</span>
+          <span class="settings-item-value">Markdown (.md)</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">AI Handoff Generation</div>
+
+        <div class="settings-note">
+          Demo Mode uses the Engram demo backend — no API key required.
+          For production use, switch to Custom Mode.
+        </div>
+
+        <div class="settings-row">
+          <span class="settings-item-name">Mode</span>
+          <div class="mode-toggle">
+            <button class="mode-btn active" id="btnModeDemo">Demo</button>
+            <button class="mode-btn" id="btnModeCustom">Custom</button>
+          </div>
+        </div>
+
+        <!-- Demo Mode panel -->
+        <div id="panelDemo" class="settings-panel">
+          <div class="settings-note">
+            Demo Mode uses the Engram demo backend.<br>
+            No API key required.<br>
+            Gemini API key is stored securely in Vercel, not in the extension.
+          </div>
+          <div id="demoStatus" class="settings-warning">Demo backend URL not connected yet.</div>
+        </div>
+
+        <!-- Custom Mode panel -->
+        <div id="panelCustom" class="settings-panel" style="display:none;">
+          <div class="settings-input-group">
+            <label class="settings-input-label" for="selectProvider">Provider</label>
+            <select id="selectProvider" class="settings-input settings-select">
+              <option value="gemini">Gemini</option>
+              <option value="openai">OpenAI</option>
+            </select>
+          </div>
+          <div class="settings-input-group">
+            <label class="settings-input-label" for="inputApiKey">API Key</label>
+            <input type="password" id="inputApiKey" class="settings-input"
+                   placeholder="Paste your API key" autocomplete="off" />
+          </div>
+          <div class="settings-input-group">
+            <label class="settings-input-label" for="inputCustomEndpoint">Custom Endpoint (optional)</label>
+            <input type="url" id="inputCustomEndpoint" class="settings-input"
+                   placeholder="Leave blank to use default" />
+          </div>
+          <div class="settings-note-warn">
+            Your API key is stored locally on this device. For best security,
+            use a restricted key or your own server-side proxy.
+          </div>
+        </div>
+
+        <div class="settings-action-row">
+          <button class="btn btn-primary btn-sm" id="btnSaveSettings">Save</button>
+          <button class="btn btn-ghost btn-sm" id="btnTestConnection" disabled
+                  title="Available after Demo backend is connected">Test</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Privacy</div>
+        <div class="settings-note">
+          Conversation data is stored locally on your device. In Demo Mode,
+          messages are sent to the Engram Vercel backend to generate handoffs.
+          No API keys are stored in the extension.
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Data</div>
+        <div class="settings-danger-row">
+          <button class="btn btn-danger btn-block" id="btnClearSettings">
+            🗑 Clear all captured data
+          </button>
+        </div>
+      </div>
 
     </div>
 

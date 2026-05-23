@@ -42,18 +42,184 @@ function tabsSendMessage(tabId, message) {
   });
 }
 
+function storageGet(key) {
+  if (isFirefox) return _api.storage.local.get(key);
+  return new Promise((resolve) => { chrome.storage.local.get(key, resolve); });
+}
+
+function storageSet(obj) {
+  if (isFirefox) return _api.storage.local.set(obj);
+  return new Promise((resolve) => { chrome.storage.local.set(obj, resolve); });
+}
+
+// TODO: Replace YOUR-VERCEL-APP with the real deployed Vercel URL before Demo Day.
+const DEMO_HANDOFF_ENDPOINT = "https://YOUR-VERCEL-APP.vercel.app/api/handoff";
+
+function isDemoEndpointPlaceholder() {
+  return DEMO_HANDOFF_ENDPOINT.includes("YOUR-VERCEL-APP");
+}
+
+// Settings
+const DEFAULT_SETTINGS = {
+  mode: "demo",
+  customProvider: "gemini",
+  customApiKey: "",
+  customEndpoint: ""
+};
+let engramSettings = { ...DEFAULT_SETTINGS };
+
+async function loadSettings() {
+  try {
+    const stored = await storageGet("engramSettings");
+    if (stored && stored.engramSettings) {
+      engramSettings = { ...DEFAULT_SETTINGS, ...stored.engramSettings };
+    }
+    console.log("[Engram] settings loaded");
+    applySettingsToUI();
+  } catch (e) {
+    console.log("[Engram] settings load failed, using defaults");
+  }
+}
+
+function applySettingsToUI() {
+  updateModeToggle(engramSettings.mode);
+
+  const apiKeyInput      = $("inputApiKey");
+  const customEndpointEl = $("inputCustomEndpoint");
+  const providerSelect   = $("selectProvider");
+  const panelDemo        = $("panelDemo");
+  const panelCustom      = $("panelCustom");
+
+  if (apiKeyInput)      apiKeyInput.value      = engramSettings.customApiKey   || "";
+  if (customEndpointEl) customEndpointEl.value = engramSettings.customEndpoint || "";
+  if (providerSelect)   providerSelect.value   = engramSettings.customProvider || "gemini";
+
+  if (panelDemo)   panelDemo.style.display   = engramSettings.mode === "demo"   ? "block" : "none";
+  if (panelCustom) panelCustom.style.display = engramSettings.mode === "custom" ? "block" : "none";
+
+  updateDemoStatus();
+}
+
+function updateModeToggle(mode) {
+  const btnDemo   = $("btnModeDemo");
+  const btnCustom = $("btnModeCustom");
+  if (!btnDemo || !btnCustom) return;
+  btnDemo.classList.toggle("active", mode === "demo");
+  btnCustom.classList.toggle("active", mode === "custom");
+}
+
+function updateDemoStatus() {
+  const statusEl = $("demoStatus");
+  if (!statusEl) return;
+  if (isDemoEndpointPlaceholder()) {
+    statusEl.textContent = "Demo backend URL not connected yet.";
+    statusEl.className = "settings-warning";
+  } else {
+    statusEl.textContent = "Connected to Engram demo backend.";
+    statusEl.className = "settings-demo-ok";
+  }
+}
+
+async function saveSettings() {
+  const apiKeyInput      = $("inputApiKey");
+  const customEndpointEl = $("inputCustomEndpoint");
+  const providerSelect   = $("selectProvider");
+
+  const next = {
+    mode:           engramSettings.mode,
+    customProvider: providerSelect   ? providerSelect.value           : "gemini",
+    customApiKey:   apiKeyInput      ? apiKeyInput.value              : "",
+    customEndpoint: customEndpointEl ? customEndpointEl.value.trim()  : ""
+  };
+
+  // In Demo Mode, don't persist sensitive fields
+  if (next.mode === "demo") {
+    next.customApiKey   = "";
+    next.customEndpoint = "";
+  }
+
+  try {
+    await storageSet({ engramSettings: next });
+    engramSettings = next;
+    console.log("[Engram] settings saved");
+    updateDemoStatus();
+
+    const btn = $("btnSaveSettings");
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = "Saved ✓";
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
+    }
+  } catch (e) {
+    console.log("[Engram] settings save failed");
+  }
+}
+
+// AI handoff via Vercel proxy — fails safely back to local export
+async function tryAIHandoff() {
+  let endpoint;
+
+  if (engramSettings.mode === "demo") {
+    if (isDemoEndpointPlaceholder()) {
+      console.log("[Engram] handoff generation fallback used");
+      return false;
+    }
+    endpoint = DEMO_HANDOFF_ENDPOINT;
+  } else {
+    endpoint = engramSettings.customEndpoint;
+    if (!endpoint) return false;
+  }
+
+  try {
+    const messages = (scanResults?.messages || []).map(m => ({
+      role: m.role,
+      text: m.text
+    }));
+
+    const resp = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages })
+    });
+
+    if (!resp.ok) {
+      console.log("[Engram] handoff generation fallback used");
+      return false;
+    }
+
+    const data = await resp.json();
+    const prompt = data.continuationPrompt || data.handoff;
+    if (!prompt) {
+      console.log("[Engram] handoff generation fallback used");
+      return false;
+    }
+
+    await navigator.clipboard.writeText(prompt);
+    $("statusBar").textContent = "✓ AI Handoff copied to clipboard!";
+    $("statusBar").style.color = "#22c55e";
+    setTimeout(() => { $("statusBar").textContent = ""; }, 3000);
+    return true;
+  } catch (e) {
+    console.log("[Engram] handoff generation fallback used");
+    return false;
+  }
+}
+
 // State machine
 let currentState = "idle";
 let scanResults = null;
 let isScanning = false;
 let hasLocalScanResult = false;
 let lastRenderSource = "init";
+let stateBeforeSettings = null;
 
 function showState(state) {
   currentState = state;
-  $("idleView").style.display = state === "idle" ? "block" : "none";
+  $("idleView").style.display     = state === "idle"     ? "block" : "none";
   $("scanningView").style.display = state === "scanning" ? "block" : "none";
-  $("doneView").style.display = state === "done" ? "block" : "none";
+  $("doneView").style.display     = state === "done"     ? "block" : "none";
+  $("settingsView").style.display = state === "settings" ? "block" : "none";
 }
 
 function renderIdle(message = "Scan to analyze this chat", disabled = false) {
@@ -115,36 +281,45 @@ function updateGauge(score) {
   if (score === undefined) return;
 
   const needleGroup = $("gaugeNeedleGroup");
-  const statusEl = $("gaugeStatus");
+  const statusEl    = $("gaugeStatus");
+  const hintEl      = $("gaugeHint");
 
   if (!needleGroup || !statusEl) return;
 
-  // score 0 = critical = left (-90deg)
-  // score 100 = fresh = right (+90deg)
+  // score 0 = critical = left (-90deg), score 100 = fresh = right (+90deg)
   const angle = -90 + (score / 100 * 180);
   needleGroup.style.transform = `rotate(${angle}deg)`;
 
-  let label, color;
+  let label, color, hint;
   if (score >= 70) {
     label = "Fresh";
     color = "#22c55e";
+    hint  = "Context is clear and coherent.";
   } else if (score >= 50) {
     label = "Getting long";
     color = "#f59e0b";
+    hint  = "Consider reviewing key decisions.";
   } else if (score >= 30) {
     label = "Degrading";
     color = "#f97316";
+    hint  = "Prepare a handoff soon.";
   } else {
     label = "Needs handoff now";
     color = "#ef4444";
+    hint  = "Generate a handoff before continuing.";
   }
 
   statusEl.textContent = label;
   statusEl.style.color = color;
+  if (hintEl) hintEl.textContent = hint;
 }
 
 // Load state from worker
 async function loadState() {
+  if (currentState === "settings") {
+    console.log("[Engram] settings view kept during state refresh");
+    return;
+  }
   console.log("[Engram] requesting state");
 
   let tabs = [];
@@ -312,40 +487,59 @@ _api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // Generate Handoff
 $("btnHandoff").addEventListener("click", async () => {
   $("statusBar").textContent = "Generating handoff...";
+  $("statusBar").style.color = "";
 
+  // Try AI generation via configured endpoint first
+  const aiSuccess = await tryAIHandoff();
+  if (aiSuccess) return;
+
+  // Fall back to local handoff
+  console.log("[Engram] handoff generation fallback used");
   const res = await runtimeSendMessage({ type: "ENGRAM_GENERATE_HANDOFF" });
   if (!res) {
-      $("statusBar").textContent = "Error generating handoff";
-      return;
+    $("statusBar").textContent = "Error generating handoff";
+    return;
   }
 
-    if (res.error) {
-      $("statusBar").textContent = res.error;
-      return;
-    }
+  if (res.error) {
+    $("statusBar").textContent = res.error;
+    return;
+  }
 
-    const prompt = res.continuationPrompt || res.handoff?.continuationPrompt;
-    if (!prompt) {
-      $("statusBar").textContent = "No prompt generated";
-      return;
-    }
+  const prompt = res.continuationPrompt || res.handoff?.continuationPrompt;
+  if (!prompt) {
+    $("statusBar").textContent = "No prompt generated";
+    return;
+  }
 
-    // Copy to clipboard
-    navigator.clipboard.writeText(prompt).then(() => {
-      $("statusBar").textContent = "✓ Handoff copied to clipboard!";
-      $("statusBar").style.color = "#22c55e";
-      setTimeout(() => {
-        $("statusBar").textContent = "";
-      }, 3000);
-    }).catch(() => {
-      $("statusBar").textContent = "Clipboard blocked — see console";
-      $("statusBar").style.color = "#ef4444";
-    });
+  navigator.clipboard.writeText(prompt).then(() => {
+    $("statusBar").textContent = "✓ Handoff copied to clipboard!";
+    $("statusBar").style.color = "#22c55e";
+    setTimeout(() => { $("statusBar").textContent = ""; }, 3000);
+  }).catch(() => {
+    $("statusBar").textContent = "Clipboard blocked — see console";
+    $("statusBar").style.color = "#ef4444";
+  });
 });
 
 // Settings
 $("btnSettings").addEventListener("click", () => {
-  _api.runtime.openOptionsPage();
+  stateBeforeSettings = currentState;
+  showState("settings");
+  loadSettings();
+});
+
+$("btnBack").addEventListener("click", () => {
+  showState(stateBeforeSettings || "idle");
+});
+
+$("btnClearSettings").addEventListener("click", () => {
+  if (!confirm("Clear all captured data?")) return;
+  scanResults = null;
+  hasLocalScanResult = false;
+  isScanning = false;
+  stateBeforeSettings = null;
+  runtimeSendMessage({ type: "ENGRAM_RESET_ALL" }).then(() => showState("idle"));
 });
 
 // Export
@@ -375,7 +569,28 @@ $("btnClear").addEventListener("click", () => {
   runtimeSendMessage({ type: "ENGRAM_RESET_ALL" }).then(() => showState("idle"));
 });
 
+// Mode toggle
+$("btnModeDemo").addEventListener("click", () => {
+  engramSettings.mode = "demo";
+  updateModeToggle("demo");
+  $("panelDemo").style.display   = "block";
+  $("panelCustom").style.display = "none";
+  updateDemoStatus();
+});
+
+$("btnModeCustom").addEventListener("click", () => {
+  engramSettings.mode = "custom";
+  updateModeToggle("custom");
+  $("panelDemo").style.display   = "none";
+  $("panelCustom").style.display = "block";
+  updateDemoStatus();
+});
+
+// Save settings
+$("btnSaveSettings").addEventListener("click", saveSettings);
+
 // Init
 renderIdle();
+loadSettings();
 loadState();
 setInterval(loadState, 3000);

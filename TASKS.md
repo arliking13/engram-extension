@@ -25,6 +25,11 @@ Ship a demoable Engram extension flow:
 - [x] Fix Claude parser counting so repeated user messages are not globally deduped.
 - [x] Filter timestamp/date-only assistant candidates and internal thinking lines.
 - [x] Collapse doubled assistant text during assistant cleanup.
+- [x] Polish popup UI: CSS custom properties, improved typography/spacing, button states, stat card dividers, shimmer progress bar.
+- [x] Add Settings view (state 4) with platform list, export format, privacy note, and clear action.
+- [x] Add Back button from Settings to prior state.
+- [x] Extend health gauge with contextual hint text per tier.
+- [x] Move Settings icon to header; remove non-functional History stub.
 - [ ] Verify popup opens with visible Scan Chat idle state in live Firefox.
 - [ ] Verify popup done view stays visible after Scan Chat in live Firefox.
 - [ ] Verify Claude scan counts are close to visible user/assistant message counts in live Firefox.
@@ -34,10 +39,30 @@ Ship a demoable Engram extension flow:
 - [ ] Confirm extracted messages/code blocks are stored under the correct project id.
 - [ ] Confirm popup health score reads from current stored state.
 - [ ] Confirm handoff export produces a continuation prompt that can be pasted into a new chat.
+- [x] Guard Settings view from async loadState() overwrite — currentState === "settings" early return added.
+- [x] Add AI Handoff Generation settings section: Demo Mode / Custom Mode toggle.
+- [x] Demo Mode: Vercel endpoint URL input, secure proxy note, missing-endpoint warning.
+- [x] Custom Mode: Gemini API key (password field), optional custom endpoint.
+- [x] Persist settings to browser.storage.local (Save button, storageGet/storageSet helpers).
+- [x] Disabled Test Connection placeholder (backend not yet deployed).
+- [x] tryAIHandoff(): calls Vercel endpoint if configured, fails safely back to local export.
+- [x] Generate Handoff: tries AI generation first, falls back to existing local/export flow.
+- [x] Added minimal logs: settings loaded, settings saved, settings view kept, demo endpoint missing, handoff fallback used.
+- [x] Updated Privacy note to be accurate about Demo Mode data flow.
 
 ## In Progress
 
 - [ ] Live Firefox extension validation after popup fallback and Claude parser DOM capture updates.
+- [ ] Replace YOUR-VERCEL-APP in DEMO_HANDOFF_ENDPOINT constant with real deployed Vercel URL before Demo Day.
+- [ ] Deploy Vercel proxy for Demo Mode handoff generation (GEMINI_API_KEY env var needed server-side).
+- [ ] Test Connection button — enable after DEMO_HANDOFF_ENDPOINT is set and Vercel backend is live.
+- [x] Remove Vercel endpoint URL input from Demo Mode — endpoint is now a built-in constant.
+- [x] Add isDemoEndpointPlaceholder() guard — fails safely to local export if constant not yet replaced.
+- [x] Add updateDemoStatus() — shows amber "not connected" or green "connected" status in Demo panel.
+- [x] Add provider select (Gemini / OpenAI) to Custom Mode.
+- [x] Add API key warning note to Custom Mode.
+- [x] saveSettings() clears sensitive fields when saving in Demo Mode.
+- [x] tryAIHandoff() Demo path uses DEMO_HANDOFF_ENDPOINT constant, not user-entered value.
 
 ## Done
 
