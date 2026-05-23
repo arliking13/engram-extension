@@ -49,43 +49,45 @@
 
       <!-- Speedometer Gauge -->
       <div class="gauge-container">
-        <svg viewBox="0 0 200 110" width="200" height="110">
-          <defs>
-            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%"   style="stop-color:#ef4444"/>
-              <stop offset="25%"  style="stop-color:#f97316"/>
-              <stop offset="50%"  style="stop-color:#f59e0b"/>
-              <stop offset="75%"  style="stop-color:#84cc16"/>
-              <stop offset="100%" style="stop-color:#22c55e"/>
-            </linearGradient>
-          </defs>
+        <div class="gauge-svg-wrap">
+          <svg viewBox="0 0 200 110" width="200" height="110">
+            <defs>
+              <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%"   style="stop-color:#ef4444"/>
+                <stop offset="25%"  style="stop-color:#f97316"/>
+                <stop offset="50%"  style="stop-color:#f59e0b"/>
+                <stop offset="75%"  style="stop-color:#84cc16"/>
+                <stop offset="100%" style="stop-color:#22c55e"/>
+              </linearGradient>
+            </defs>
 
-          <!-- Background arc -->
-          <path d="M 15 100 A 85 85 0 0 1 185 100"
-                fill="none" stroke="#1e1e1e" stroke-width="18" stroke-linecap="round"/>
+            <!-- Background arc -->
+            <path d="M 15 100 A 85 85 0 0 1 185 100"
+                  fill="none" stroke="#1e1e1e" stroke-width="18" stroke-linecap="round"/>
 
-          <!-- Colored gradient arc -->
-          <path d="M 15 100 A 85 85 0 0 1 185 100"
-                fill="none" stroke="url(#gaugeGrad)" stroke-width="18"
-                stroke-linecap="round" opacity="0.9"/>
+            <!-- Colored gradient arc -->
+            <path d="M 15 100 A 85 85 0 0 1 185 100"
+                  fill="none" stroke="url(#gaugeGrad)" stroke-width="18"
+                  stroke-linecap="round" opacity="0.9"/>
 
-          <!-- Zone labels -->
-          <text x="13"  y="97" font-size="7.5" fill="#ef4444" font-family="system-ui" text-anchor="middle">CRIT</text>
-          <text x="38"  y="46" font-size="7.5" fill="#f97316" font-family="system-ui" text-anchor="middle">LOW</text>
-          <text x="100" y="19" font-size="7.5" fill="#f59e0b" font-family="system-ui" text-anchor="middle">FAIR</text>
-          <text x="162" y="46" font-size="7.5" fill="#84cc16" font-family="system-ui" text-anchor="middle">GOOD</text>
-          <text x="187" y="97" font-size="7.5" fill="#22c55e" font-family="system-ui" text-anchor="middle">SAFE</text>
+            <!-- Needle group — rotates around (100, 100) -->
+            <g id="gaugeNeedleGroup" style="transform-origin: 100px 100px; transform: rotate(-90deg); transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);">
+              <line x1="100" y1="100" x2="100" y2="24" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="100" y1="100" x2="100" y2="108" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"/>
+            </g>
 
-          <!-- Needle group — rotates around (100, 100) -->
-          <g id="gaugeNeedleGroup" style="transform-origin: 100px 100px; transform: rotate(-90deg); transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);">
-            <line x1="100" y1="100" x2="100" y2="24" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="100" y1="100" x2="100" y2="108" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"/>
-          </g>
+            <!-- Center cap -->
+            <circle cx="100" cy="100" r="6"   fill="#1a1a1a" stroke="#333" stroke-width="1"/>
+            <circle cx="100" cy="100" r="3.5" fill="#a78bfa"/>
+          </svg>
 
-          <!-- Center cap -->
-          <circle cx="100" cy="100" r="6"   fill="#1a1a1a" stroke="#333" stroke-width="1"/>
-          <circle cx="100" cy="100" r="3.5" fill="#a78bfa"/>
-        </svg>
+          <!-- HTML zone labels — positioned over SVG for reliable contrast -->
+          <span class="glabel glabel-crit">CRIT</span>
+          <span class="glabel glabel-low">LOW</span>
+          <span class="glabel glabel-fair">FAIR</span>
+          <span class="glabel glabel-good">GOOD</span>
+          <span class="glabel glabel-safe">SAFE</span>
+        </div>
 
         <div id="gaugeStatus" class="gauge-status">—</div>
         <div id="gaugeHint"   class="gauge-hint"></div>
@@ -131,10 +133,29 @@
         ⬡ Generate Handoff
       </button>
 
+      <!-- Migration Package Card -->
+      <div class="pkg-card">
+        <div class="pkg-card-header">Migration Package</div>
+        <div class="pkg-card-sub">ZIP with handoff, full chat, signals, and optional files.</div>
+        <div class="pkg-buttons">
+          <button class="btn btn-ghost" id="btnExportPackage"
+                  title="Download a local ZIP migration package">
+            ↓ Download ZIP
+          </button>
+          <button class="btn btn-ghost" id="btnExportWithFiles"
+                  title="Add your own files to the ZIP migration package">
+            ↓ ZIP + Add Files
+          </button>
+        </div>
+      </div>
+      <input type="file" id="filePickerInput" multiple style="display:none;">
+
       <!-- Secondary Actions -->
       <div class="action-buttons">
-        <button class="btn btn-ghost" id="btnExport" title="Download handoff as .md file">↓ Export</button>
-        <button class="btn btn-ghost btn-danger" id="btnClear" title="Clear current chat data">🗑 Clear</button>
+        <button class="btn btn-ghost" id="btnExport"
+                title="Export captured chat as plain text">Export Chat</button>
+        <button class="btn btn-ghost btn-danger" id="btnClear"
+                title="Clear current chat data">🗑 Clear</button>
       </div>
 
       <!-- Status feedback -->
@@ -249,6 +270,7 @@
     </div>
 
   </div>
+  <script src="../utils/zip-writer.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

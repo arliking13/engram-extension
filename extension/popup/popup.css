@@ -114,6 +114,11 @@ body {
   min-width: 0;
 }
 
+.platform-chat-title.no-title {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 /* ── Views ───────────────────────────────────────────────────── */
 
 .view {
@@ -183,6 +188,34 @@ body {
   align-items: center;
   gap: 2px;
 }
+
+.gauge-svg-wrap {
+  position: relative;
+  width: 200px;
+  height: 110px;
+}
+
+.gauge-svg-wrap svg {
+  display: block;
+}
+
+/* HTML zone labels — absolutely positioned over the SVG */
+.glabel {
+  position: absolute;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateX(-50%);
+  text-shadow: 0 0 6px #000, 0 1px 4px rgba(0,0,0,0.95);
+}
+
+.glabel-crit { color: #fca5a5; left: 16px;  bottom: 1px;  }
+.glabel-low  { color: #fdba74; left: 40px;  top:    33px; }
+.glabel-fair { color: #fde68a; left: 100px; top:    4px;  }
+.glabel-good { color: #bef264; left: 160px; top:    33px; }
+.glabel-safe { color: #86efac; left: 184px; bottom: 1px;  }
 
 .gauge-status {
   font-size: 14px;
@@ -305,6 +338,55 @@ body {
 .action-buttons {
   display: flex;
   gap: 6px;
+}
+
+/* ── Migration Package Card ──────────────────────────────────── */
+
+.pkg-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pkg-card-header {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 5px 12px 3px;
+}
+
+.pkg-card-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  padding: 0 12px 5px;
+}
+
+.pkg-buttons {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+
+.pkg-buttons .btn-ghost {
+  border: none;
+  border-radius: 0;
+  flex: 1;
+  font-size: 11.5px;
+  padding: 6px 6px;
+}
+
+.pkg-buttons .btn-ghost + .btn-ghost {
+  border-left: 1px solid var(--border);
+}
+
+.pkg-buttons .btn-ghost:hover:not(:disabled) {
+  border-color: transparent;
 }
 
 /* ── Status bar ──────────────────────────────────────────────── */
