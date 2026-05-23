@@ -361,6 +361,7 @@
         codeCount: 0,
         messages: [],
         chatId: getCurrentChatId(),
+        sourceTitle: getChatTitle(),
         scanDuration,
         totalChars: 0,
         domSize,
@@ -386,6 +387,7 @@
       codeCount: codeBlocks.length,
       messages: allMessages,
       chatId: getCurrentChatId(),
+      sourceTitle: getChatTitle(),
       scanDuration,
       totalChars,
       domSize,
@@ -403,6 +405,32 @@
     // Extract chat ID from URL or generate from title
     const match = window.location.pathname.match(/\/c\/([a-z0-9]+)/i);
     return match ? match[1] : "unknown";
+  }
+
+  function getChatTitle() {
+    // Try Claude.ai-specific DOM selectors for the conversation title
+    const selectors = [
+      '[data-testid="chat-menu-trigger"]',
+      '[data-testid="conversation-name"]',
+      'nav [aria-current="page"]',
+      'nav [aria-selected="true"]',
+      '.conversation-title',
+    ];
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const text = (el.innerText || el.textContent || "").trim();
+        if (text && text.length > 1 && !/^claude$/i.test(text)) return text;
+      } catch (_) {}
+    }
+    // Fallback: strip " - Claude" suffix from document.title
+    const raw = (document.title || "").trim();
+    if (raw) {
+      const cleaned = raw.replace(/\s*[-–|]\s*claude.*$/i, "").trim();
+      if (cleaned && cleaned.length > 1 && !/^claude$/i.test(cleaned)) return cleaned;
+    }
+    return null;
   }
 
   function sendRuntimeMessage(message) {
