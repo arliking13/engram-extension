@@ -45,6 +45,20 @@ Agents must not rewrite the app or perform broad refactors while implementing MV
 
 Rationale: The project is in hackathon MVP mode; continuity and demo reliability matter more than architectural churn.
 
+### Job Search workflow is a lightweight additive layer, not a pivot
+
+Engram remains an AI chat continuity tool ("Keep the thread. Never lose context."). The Job Search feature is a thin layer on top: LinkedIn job page → Engram widget detects job → user copies AI analysis prompt → user analyzes in Claude/GPT/Gemini → (future) Engram captures that AI session for continuity handoff.
+
+Rationale: Hackathon theme is identifying high-quality remote job opportunities. Aligning via the workflow layer avoids disrupting the MVP and avoids a full product pivot.
+
+Constraints: No full AI job analysis in the extension. No Vercel job analysis calls. No external API calls from the job skeleton. All job data stored locally.
+
+### Job data stored in browser.storage.local, not IndexedDB
+
+Saved jobs go into `browser.storage.local` under key `engramSavedJobs` (array). Session/health/handoff data stays in IndexedDB via the existing `Storage` class.
+
+Rationale: Keeps job storage simple and separate from chat session storage. IndexedDB schema does not need versioning or migration for the skeleton.
+
 ## Candidate Or Historical Decisions To Revisit Later
 
 - Gemini parser and Gemini API integration are not current MVP priorities unless needed for demo requirements.

@@ -53,6 +53,24 @@ Ship a demoable Engram extension flow:
 ## In Progress
 
 - [ ] Live Firefox extension validation after popup fallback and Claude parser DOM capture updates.
+- [ ] Live Firefox validation of LinkedIn widget fix: open https://www.linkedin.com/jobs/search-results/?currentJobId=... — widget must appear even if it only shows "LinkedIn job page detected".
+- [ ] Confirm Copy AI Prompt copies 8-section structured prompt to clipboard.
+- [ ] Confirm Save Job stores data — check browser.storage.local in devtools for engramSavedJobs.
+- [ ] Confirm SPA navigation to a second job updates widget within ~3 seconds.
+- [ ] Replace YOUR-VERCEL-APP in DEMO_HANDOFF_ENDPOINT and deploy Vercel backend.
+
+## LinkedIn Job Skeleton (added 2026-05-23)
+
+- [x] job-detector.js — URL + DOM detection of LinkedIn job detail pages.
+- [x] linkedin-parser.js — extracts title, company, location, remoteStatus, salary, description, url, capturedAt.
+- [x] job-widget.js — fixed floating widget with Save Job + Copy AI Prompt + Close; SPA nav polling.
+- [x] buildJobPrompt() — 8-section structured AI evaluation prompt (legitimacy, red flags, remote quality, company credibility, salary, Canada newcomer fit, verify questions, recommendation).
+- [x] ENGRAM_SAVE_JOB handler in worker.js — appends to engramSavedJobs in browser.storage.local.
+- [x] manifest.json — LinkedIn content scripts + host permissions added.
+- [ ] Verify widget doesn't break LinkedIn layout in live Firefox.
+- [ ] Verify widget re-appears after SPA navigation to a different job.
+- [ ] Verify Save Job stores correct data (check browser.storage.local in devtools).
+- [ ] Wire Claude/GPT session capture to job-sourced AI analysis sessions (future pass).
 - [ ] Replace YOUR-VERCEL-APP in DEMO_HANDOFF_ENDPOINT constant with real deployed Vercel URL before Demo Day.
 - [ ] Deploy Vercel proxy for Demo Mode handoff generation (GEMINI_API_KEY env var needed server-side).
 - [ ] Test Connection button — enable after DEMO_HANDOFF_ENDPOINT is set and Vercel backend is live.

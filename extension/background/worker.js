@@ -5,8 +5,9 @@
 
 import { Storage } from "../storage/storage.js";
 
-const storage = new Storage();
-const runtime = typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
+const storage   = new Storage();
+const runtime   = typeof browser !== "undefined" ? browser.runtime   : chrome.runtime;
+const storeApi  = typeof browser !== "undefined" ? browser.storage.local : chrome.storage.local;
 const isFirefox = typeof browser !== "undefined";
 
 // ── Message Router ──────────────────────────────────────────────────────────
@@ -50,6 +51,9 @@ function routeMessage(msg, sender) {
 
     case "ENGRAM_SWITCH_PROJECT":
       return handleSwitchProject(msg);
+
+    case "ENGRAM_SAVE_JOB":
+      return handleSaveJob(msg);
 
     default:
       return null;
@@ -116,6 +120,19 @@ async function handleListProjects() {
 
 async function handleSwitchProject(msg) {
   await storage.setActiveProject(msg.projectId);
+  return { ok: true };
+}
+
+async function handleSaveJob(msg) {
+  const job = msg.job;
+  if (!job) return { error: "No job data provided" };
+
+  const stored = await storeApi.get("engramSavedJobs");
+  const jobs   = stored.engramSavedJobs || [];
+  jobs.push({ ...job, savedAt: Date.now() });
+  await storeApi.set({ engramSavedJobs: jobs });
+
+  console.log("[Engram] job saved");
   return { ok: true };
 }
 

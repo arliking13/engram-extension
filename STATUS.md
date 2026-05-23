@@ -62,6 +62,62 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 - Local Node VM harness for the popup scan/null-state race passed: after `ENGRAM_SCAN_COMPLETE`, a null state response no longer overwrote `doneView`.
 - Local Node VM harness for parser count/cleanup passed: repeated user text counted twice, Russian date labels filtered, internal thinking removed, and doubled assistant text collapsed.
 
+## Last Code Change (LinkedIn widget live-fix: widget not appearing on search-results pages)
+
+All three LinkedIn job files were rewritten to fix a live test failure where no widget appeared on `https://www.linkedin.com/jobs/search-results/?currentJobId=...`.
+
+**Root causes fixed:**
+1. Parser relied on h1/h2/h3 for title — LinkedIn search-results renders the job title only as an `<a href="/jobs/view/{id}">` link, not a heading.
+2. Single `checkAndRender()` call on load — LinkedIn's React app renders the job detail panel asynchronously after `document_idle`, so a single check always ran too early.
+3. Buttons captured `job` at inject-time — if the widget was injected with null job data, buttons had no data even after extraction succeeded.
+4. No try/catch around injection — any error silently stopped the widget from appearing.
+5. No MutationObserver — couldn't detect when LinkedIn rendered the job detail panel.
+
+**Fixes applied per file:**
+
+`job-detector.js`:
+- Regex changed from `\d+` to `[\w-]+` for `currentJobId` param (handles alphanumeric IDs).
+- Checks `window.location.search` directly before full URL.
+- DOM fallback broadened to include `[class*="job-details"]`, `[class*="jobs-unified-top-card"]`, `[class*="top-card__job-title"]`, `[data-job-id]`, `[class*="job-view-layout"]`.
+
+`linkedin-parser.js`:
+- Title extraction now uses job ID from URL to find `a[href*="/jobs/view/${jobId}"]` — the authoritative title link on search-results pages.
+- Added `[class*="job-details-jobs-unified-top-card__*"]` selectors (modern LinkedIn class patterns).
+- Fallback: scan all `a[href*="/jobs/view/"]` tags for a title-length string.
+- Description: dedicated containers tried first; falls back to "About the job" body text parsing.
+
+`job-widget.js`:
+- `console.log('[Engram] LinkedIn widget script loaded')` placed OUTSIDE the IIFE — guaranteed to execute.
+- `currentJob` is a module-level variable updated on every `checkAndRender()`. Buttons read from it, not a stale inject-time closure.
+- `updateWidgetInfo()` updates info line without re-injection; uses `data-engram-info` attribute.
+- `checkAndRender()` fully wrapped in try/catch; logs `[Engram] LinkedIn widget injection failed` on error.
+- `bootstrap()`: immediate check + retries at 500ms, 1500ms, 3000ms.
+- `startPolling()`: every 2s for up to 40s (MAX_POLLS=20), then switches to URL-change-only poll.
+- `startMutationWatch()`: MutationObserver on `document.body` direct children, 500ms debounce.
+
+**Required logs confirmed present:** `LinkedIn widget script loaded`, `LinkedIn detection tick`, `LinkedIn job context detected`, `LinkedIn extraction result`, `LinkedIn widget injected`, `LinkedIn widget updated`, `LinkedIn widget injection failed`.
+
+**Syntax check:** `node --check` passed on all three files.
+
+**Not yet live-tested in Firefox.** Verification steps in HANDOFF.md.
+
+## Last Code Change (LinkedIn Job Search skeleton)
+
+**New files** (untracked until first commit):
+- `extension/platforms/jobs/job-detector.js` — sets `window.__engramJobs.detectJobPage()`. Detects LinkedIn job detail pages by URL pattern (`/jobs/view/{id}/`, `?currentJobId=`) and DOM fallback (h1 heading selectors). No network calls.
+- `extension/platforms/jobs/linkedin-parser.js` — sets `window.__engramJobs.extractJob()`. Extracts `title`, `company`, `location`, `remoteStatus`, `salary`, `description`, `url`, `capturedAt` from the LinkedIn Jobs DOM using multiple selector fallbacks. Logs extraction result (fields only, no description text). No network calls.
+- `extension/platforms/jobs/job-widget.js` — IIFE content script. Calls `detectJobPage()` and `extractJob()` on load and again on SPA URL changes (2-second polling). Injects a 228px fixed-position widget (bottom-right) in Engram's dark theme (#1a1a1a / #a78bfa). Widget has: Engram logo, job title·company info line, Save Job button, Copy AI Prompt button, status line, Close button. Save Job sends `ENGRAM_SAVE_JOB` to the background worker. Copy AI Prompt builds an 8-section structured evaluation prompt (legitimacy, red flags, remote quality, company credibility, salary, Canada newcomer fit, verify questions, recommendation) and copies it to clipboard. No external API calls.
+
+**Modified files**:
+- `extension/manifest.json` — added LinkedIn content scripts entry (matches `https://www.linkedin.com/jobs/*` and `https://*.linkedin.com/jobs/*`, loads all three job scripts, `run_at: document_idle`). Added matching host permissions.
+- `extension/background/worker.js` — added `storeApi` constant (`browser.storage.local` / `chrome.storage.local`). Added `ENGRAM_SAVE_JOB` case to `routeMessage()`. Added `handleSaveJob()`: reads `engramSavedJobs` array from `storage.local`, appends the new job with `savedAt` timestamp, writes back. Logs `[Engram] job saved`.
+
+**What was not changed**: `claude/parser.js`, `popup.js`, `popup.html`, `popup.css`, `settings`, or any existing Claude flow.
+
+**Architecture note**: Job Search is a lightweight additive layer. Engram remains an AI chat continuity tool. The job workflow is: LinkedIn page → widget detects job → user copies AI analysis prompt → user pastes into Claude/GPT/Gemini → (future) Engram captures that AI session for continuity handoff.
+
+**No external API calls** are made by this skeleton. All data stays local.
+
 ## Last Code Change (Settings: Demo Mode architecture simplification)
 
 - `DEMO_HANDOFF_ENDPOINT` constant added to `popup.js`. Contains a placeholder URL (`YOUR-VERCEL-APP`). TODO comment marks it for replacement before Demo Day.

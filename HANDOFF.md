@@ -4,18 +4,28 @@ Last active agent:
 Claude Code (claude-sonnet-4-6)
 
 Current phase:
-Settings: Demo Mode endpoint constant + Custom Mode provider select.
+LinkedIn widget live-fix + existing Claude continuity MVP.
 
 Current goal:
-Demo Mode is now zero-input for judges — the Vercel endpoint is a built-in constant (DEMO_HANDOFF_ENDPOINT). Replace YOUR-VERCEL-APP with the real Vercel URL before Demo Day. Custom Mode now offers a Gemini/OpenAI provider select with a local API key field for personal use.
+The LinkedIn job widget has been fully rewritten to fix the live test failure (widget not appearing on search-results pages). All three job files (job-detector.js, linkedin-parser.js, job-widget.js) were rewritten. Syntax checks passed. Live Firefox validation is the next required step.
 
 Immediate focus:
-- Replace YOUR-VERCEL-APP in `DEMO_HANDOFF_ENDPOINT` constant (popup.js line ~57) with the real deployed Vercel URL.
-- Deploy Vercel proxy backend: POST /api/handoff → Gemini 1.5 Flash. GEMINI_API_KEY lives in Vercel env vars only, never in the extension.
-- Load the extension in Firefox, scan a Claude chat, click Generate Handoff — should call DEMO_HANDOFF_ENDPOINT and copy AI-generated prompt to clipboard.
-- Verify Settings view stays open during 3-second polling (guard already in place).
-- Verify Scan Chat, Done view, Export, and Clear still work.
-- Live Firefox validation of Claude message counts (pending from prior passes).
+1. Load the extension in Firefox: about:debugging → Load Temporary Add-on → extension/manifest.json.
+2. Navigate to: https://www.linkedin.com/jobs/search-results/?currentJobId=<any-id>
+3. Open browser console. Confirm these logs appear:
+   - "[Engram] LinkedIn job detector loaded"
+   - "[Engram] LinkedIn parser loaded"
+   - "[Engram] LinkedIn widget script loaded"
+   - "[Engram] LinkedIn detection tick"
+   - "[Engram] LinkedIn job context detected"
+   - "[Engram] LinkedIn extraction result" (with fields)
+   - "[Engram] LinkedIn widget injected"
+4. Confirm widget appears bottom-right — even "LinkedIn job page detected" is a pass.
+5. Click Copy AI Prompt — confirm clipboard contains a structured 8-section evaluation prompt.
+6. Click Save Job — confirm "[Engram] job saved" in console + engramSavedJobs in browser.storage.local.
+7. Navigate to a second LinkedIn job via SPA — confirm widget updates within ~3 seconds.
+8. Open Claude.ai, scan a chat — confirm Scan Chat / Done / Export / Settings flows are unaffected.
+9. Replace YOUR-VERCEL-APP in DEMO_HANDOFF_ENDPOINT (popup.js) and deploy Vercel backend.
 
 Important architectural constraints:
 - Do NOT rewrite the project structure.
@@ -24,6 +34,7 @@ Important architectural constraints:
 - Gemini support is postponed until Claude flow is stable.
 
 Known risks:
+- LinkedIn widget has NOT been live-tested in Firefox yet after the rewrite. All three job files are syntax-clean but untested against the real LinkedIn DOM.
 - Parser count/cleanup fix has been code-path verified locally but still needs manual Firefox validation against the real Claude chat/export.
 - Popup render-race fix has been code-path verified locally but still needs manual Firefox popup verification.
 - Live Firefox profile has not yet been used to verify the updated Claude DOM capture path.
@@ -34,7 +45,23 @@ Known risks:
 Architecture note:
 Extension → Vercel API route → Gemini API. GEMINI_API_KEY lives only in Vercel environment variables. The extension stores the Vercel endpoint URL locally (browser.storage.local). In Custom Mode, the user's Gemini API key is stored locally only, and is only used to call a user-configured proxy endpoint — it is never logged or sent to Engram servers. No real API key is hardcoded anywhere in the extension.
 
-What changed in this pass (Demo Mode constant + Custom Mode provider select):
+What changed in this pass (LinkedIn widget live-fix):
+- job-detector.js rewritten: regex changed to `[\w-]+`, checks `window.location.search` directly, DOM fallback broadened.
+- linkedin-parser.js rewritten: title extraction now uses job ID from URL to find `a[href*="/jobs/view/${jobId}"]`; added `job-details-jobs-unified-top-card` selectors; "About the job" body text fallback for description.
+- job-widget.js rewritten: `currentJob` module-level (buttons always up-to-date); try/catch around injection; `console.log` OUTSIDE the IIFE (guaranteed); bootstrap retries at 500ms/1500ms/3000ms; 2s polling for 40s then URL-only; MutationObserver on body direct children with 500ms debounce; `updateWidgetInfo()` with `data-engram-info` attribute.
+- STATUS.md and TASKS.md updated. HANDOFF.md updated.
+- syntax checks: `node --check` passed on all three files.
+
+What changed in prior pass (LinkedIn Job Search skeleton):
+- extension/platforms/jobs/job-detector.js created: URL + DOM detection.
+- extension/platforms/jobs/linkedin-parser.js created: multi-selector field extraction.
+- extension/platforms/jobs/job-widget.js created: floating widget with Save Job + Copy AI Prompt + SPA polling.
+- extension/manifest.json: LinkedIn content scripts + host permissions added.
+- extension/background/worker.js: ENGRAM_SAVE_JOB handler, storeApi constant.
+- No changes to claude/parser.js, popup, or Settings.
+- No external API calls. All job data stored locally in browser.storage.local (engramSavedJobs).
+
+What changed in prior pass (Demo Mode constant + Custom Mode provider select):
 - DEMO_HANDOFF_ENDPOINT constant added (placeholder URL, TODO comment).
 - isDemoEndpointPlaceholder() guard — tryAIHandoff() falls back immediately if constant not replaced.
 - Demo Mode panel no longer has a Vercel URL input. Shows a status line (#demoStatus) set by updateDemoStatus(): amber if placeholder, green if real URL.
