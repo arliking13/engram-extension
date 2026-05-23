@@ -1,1 +1,4 @@
 .aider*
+
+# Local AI assistant settings
+.claude/
