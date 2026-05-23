@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-22 by Claude Code.
+Last updated: 2026-05-23 by Codex.
 
 ## Snapshot
 
@@ -17,6 +17,15 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 - Claude parser now preserves repeated user messages as separate DOM messages, filters timestamp/date-only assistant candidates, removes internal thinking lines, and collapses doubled assistant text.
 - Popup now renders `idleView` immediately on load and falls back to a visible Scan Chat state if `ENGRAM_GET_STATE` fails or returns null.
 - Popup now keeps a completed local scan result visible when a later async `ENGRAM_GET_STATE` response is null/unavailable.
+- Optional Mini Health Widget WIP is present behind the Settings toggle and defaults off.
+- Mini Health Widget drag handling now uses fixed `left/top` positioning after interaction starts, clamps inside the viewport, and saves position only after a completed drag.
+- Claude MutationObserver ignores Engram's widget root so widget DOM updates do not trigger chat rescans.
+- Popup success/non-error status messages now clear with a guarded timer so newer statuses and real errors are not immediately hidden.
+- Popup now persists the last popup-computed health snapshot to `browser.storage.local` under `engramLastHealthSnapshot`.
+- Mini Health Widget reads that stored snapshot for health label, migration risk, browser load, counts, and last scan time instead of computing its own health formula.
+- Popup also keeps a bounded `engramHealthSnapshotsByChatId` map of the latest 20 health snapshots so returning to a previously scanned chat can restore exact widget status.
+- Mini Health Widget now falls back to a clearly labeled `Live` estimate when the current chat has visible messages but no matching exact snapshot.
+- Mini Health Widget live fallback now uses the shared `Safe/Good/Fair/Risky/Critical` status vocabulary, with estimated accuracy shown separately.
 
 ## Known Issues To Preserve
 
@@ -25,8 +34,101 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 - Firefox Promise-path messaging was verified with a local Node VM harness, not by clicking through a live Firefox profile.
 - `utils/compat.js` is not currently loaded by `manifest.json`; active fixes were applied directly to the worker, popup, and Claude parser messaging paths.
 - Claude.ai MutationObserver capture still needs manual Firefox verification against the live page after the DOM selector update.
+- Mini Health Widget still needs live Firefox/Claude validation for drag, reload restoration, scan completion, handoff export, ZIP export, ZIP + files, Export Chat, Settings Back, and LinkedIn Copy AI Prompt regression.
+- Mini Health Widget health snapshot matching still needs live verification that same-chat snapshots display and stale cross-chat snapshots show "Not scanned".
+- Mini Health Widget hybrid mode still needs live verification while switching among scanned and unscanned Claude chats.
+- Mini Health Widget status vocabulary still needs live verification that estimated mode and full-scan mode use the same status names with only `Accuracy` changing.
 
 ## Last Code Change
+
+- Unified Mini Health Widget and popup status naming.
+- Estimated widget mode now maps visible chat data to `Safe`, `Fair`, `Risky`, or `Critical` instead of `Likely ...` labels; small chats now show `Safe`, matching the popup vocabulary.
+- Estimated mode keeps accuracy separate with a compact `est.` badge/tooltip and an expanded `Accuracy: Estimated` row.
+- Exact full-scan mode continues to display the popup snapshot status exactly, with `Accuracy: Full scan` and no `est.` badge.
+- No-data compact state remains `Waiting for chat`; expanded state says `No readable chat data yet.`
+- Prior drag positioning, Settings toggle, scan logic, handoff, ZIP export, exact snapshot matching, and MutationObserver widget-ignore behavior were preserved.
+- No new durable product or architecture decision was made.
+
+## Verification
+
+- `node --check extension/platforms/claude/parser.js`
+- `node --check extension/popup/popup.js`
+- `node --check extension/utils/zip-writer.js`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+
+## Previous Code Change
+
+- Refined Mini Health Widget live and exact status wording/design.
+- Exact full-scan mode still uses popup snapshot values, but expanded labels now read `Status`, `Risk`, `Load`, `Messages`, `Code blocks`, `Accuracy: Full scan`, and `Last scan`.
+- Live estimate mode now uses deterministic visible-data thresholds: `Likely Critical` at 250+ messages or 80+ code blocks, `Likely Risky` at 120+ messages or 30+ code blocks, `Likely Fair` at 60+ messages or 10+ code blocks, and `Likely Good` otherwise.
+- Live expanded copy now says it is based on visible chat activity, shows `Accuracy: Live estimate`, and notes that a full scan creates a handoff-ready report.
+- No-data mode now says `Waiting for chat` / `No readable chat data yet` instead of presenting `Not scanned` as the primary state.
+- Prior drag positioning, Settings toggle, exact snapshot matching, and MutationObserver widget-ignore behavior were preserved.
+- No new durable product or architecture decision was made.
+
+## Previous Verification
+
+- `node --check extension/platforms/claude/parser.js`
+- `node --check extension/popup/popup.js`
+- `node --check extension/utils/zip-writer.js`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+
+## Previous Code Change
+
+- Added Mini Health Widget hybrid status behavior for chat switching.
+- Popup health snapshot persistence now writes both `engramLastHealthSnapshot` and a bounded `engramHealthSnapshotsByChatId` map keyed by chat id or normalized URL.
+- Mini Health Widget resolves exact status from the snapshot map first, then the latest snapshot, and only displays exact health labels when the snapshot matches the current chat.
+- If no exact snapshot matches but visible messages are available, the widget shows `Live` with current message/code counts, `Source: Live page read`, and a hint to run the full popup scan.
+- If neither exact snapshot nor visible messages are available, the widget still shows `Not scanned`.
+- Live estimate colors are simple volume indicators and do not reuse popup health labels such as Good/Risky/Critical.
+- Prior drag positioning and MutationObserver widget-ignore behavior were preserved.
+- No new durable product or architecture decision was made.
+
+## Previous Verification
+
+- `node --check extension/platforms/claude/parser.js`
+- `node --check extension/popup/popup.js`
+- `node --check extension/utils/zip-writer.js`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+
+## Previous Code Change
+
+- Aligned Mini Health Widget status with the main popup health data.
+- Added shared popup health display helper for gauge label/color/hint and snapshot label/color.
+- `renderDone()` now saves `engramLastHealthSnapshot` after computing health from `scanResults`.
+- Snapshot includes chat id, source URL/title, platform, scan time, health score/label/color, migration risk, browser load, action, reasons, and scan counts.
+- Mini Health Widget now reads `engramLastHealthSnapshot` and displays the stored popup-computed health label, migration risk, browser load, counts, and last scan time.
+- Widget shows "Not scanned" when there is no snapshot or when the snapshot does not match the current Claude chat by chat id or normalized URL.
+- Widget still updates only from its own interval/storage-change path, not from DOM mutations; prior drag behavior is preserved.
+- No new durable product or architecture decision was made.
+
+## Previous Verification
+
+- `node --check extension/platforms/claude/parser.js`
+- `node --check extension/popup/popup.js`
+- `node --check extension/utils/zip-writer.js`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+
+## Previous Code Change
+
+- Stabilized Mini Health Widget drag behavior in `extension/platforms/claude/parser.js`.
+- Widget position persistence now stores `{ left, top }` and still accepts older `{ x, y }` saved positions.
+- Widget drag starts from `getBoundingClientRect()`, switches the root to inline `left/top`, sets `right/bottom` to `auto`, clamps with an 8px viewport margin, and writes storage only on pointerup after actual movement.
+- Widget CSS now keeps the root compact with `width: max-content`, `max-width: 260px`, `height: auto`, `resize: none`, and `overflow: hidden`.
+- Widget click without drag still toggles collapsed/expanded state; drag no longer toggles.
+- MutationObserver callback now skips widget-only mutations.
+- Settings copy now reads "Show mini health widget on chat pages"; default remains off.
+- Popup status cleanup now uses a guarded clear timer for successful/non-error handoff/export/package messages and does not auto-clear package/export errors.
+- No new durable product or architecture decision was made.
+
+## Previous Verification
+
+- `node --check extension/platforms/claude/parser.js`
+- `node --check extension/popup/popup.js`
+- `node --check extension/utils/zip-writer.js`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+
+## Previous Code Change
 
 - Updated `extension/platforms/claude/parser.js` message identity so DOM messages use stable per-node source keys instead of global `role:text` dedupe.
 - Repeated user messages such as "привет", "хорошо", and "окей" should now count when they are separate DOM message nodes.
@@ -50,7 +152,7 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 - `extension/popup/popup.js` now wraps `runtime.sendMessage`, `tabs.query`, and `tabs.sendMessage` so Firefox uses Promise APIs and Chrome uses callbacks.
 - No new durable product or architecture decision was made.
 
-## Verification
+## Previous Verification
 
 - `node --check extension/background/worker.js`
 - `node --check extension/platforms/claude/parser.js`

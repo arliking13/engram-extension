@@ -49,10 +49,28 @@ Ship a demoable Engram extension flow:
 - [x] Generate Handoff: tries AI generation first, falls back to existing local/export flow.
 - [x] Added minimal logs: settings loaded, settings saved, settings view kept, demo endpoint missing, handoff fallback used.
 - [x] Updated Privacy note to be accurate about Demo Mode data flow.
+- [x] Stabilize Mini Health Widget dragging so it uses compact fixed left/top movement instead of resizing/stretching.
+- [x] Make Claude MutationObserver ignore Engram's Mini Health Widget root.
+- [x] Guard popup success/non-error status auto-clear without immediately hiding real errors.
+- [x] Save popup-computed health snapshots to `browser.storage.local` for Mini Health Widget display.
+- [x] Remove Mini Health Widget's independent health formula from the displayed status path.
+- [x] Show "Not scanned" in the Mini Health Widget when the saved snapshot does not match the current Claude chat.
+- [x] Add `engramHealthSnapshotsByChatId` map capped at 20 snapshots for previously scanned chat restoration.
+- [x] Add Mini Health Widget `Live` estimate fallback for visible unscanned chats.
+- [x] Refine Mini Health Widget live labels to `Likely Good/Fair/Risky/Critical`.
+- [x] Update Mini Health Widget expanded copy to show exact/full-scan vs live-estimate accuracy clearly.
+- [x] Unify Mini Health Widget estimated status names with popup vocabulary: `Safe/Good/Fair/Risky/Critical`.
+- [x] Move estimated/full-scan distinction into secondary `Accuracy` metadata and compact `est.` badge.
 
 ## In Progress
 
 - [ ] Live Firefox extension validation after popup fallback and Claude parser DOM capture updates.
+- [ ] Live Firefox validation of Mini Health Widget: enable setting, drag chip, reload position, edge clamp, click toggle, Scan Chat, message counters, Generate Handoff, Download ZIP, ZIP + Add Files, Export Chat, Settings Back.
+- [ ] Live Firefox validation that Mini Health Widget health label, Migration Risk, Browser Load, and counts match the main popup after Scan Chat.
+- [ ] Live Firefox validation that switching to an unscanned Claude chat shows `Live` with current counts instead of stale exact status.
+- [ ] Live Firefox validation that switching back to a previously scanned Claude chat restores exact widget status from the snapshot map.
+- [ ] Live Firefox validation that unscanned visible chats show shared status names with `Accuracy: Estimated`, not generic `Live` or `Not scanned`.
+- [ ] Live Firefox validation that estimated and full-scan Mini Health Widget modes use the same status names and only `Accuracy` changes.
 - [ ] Live Firefox validation of LinkedIn widget fix: open https://www.linkedin.com/jobs/search-results/?currentJobId=... — widget must appear even if it only shows "LinkedIn job page detected".
 - [ ] Confirm Copy AI Prompt copies 8-section structured prompt to clipboard.
 - [ ] Confirm Save Job stores data — check browser.storage.local in devtools for engramSavedJobs.
