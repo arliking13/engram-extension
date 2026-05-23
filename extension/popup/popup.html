@@ -70,11 +70,11 @@
                 stroke-linecap="round" opacity="0.9"/>
 
           <!-- Zone labels -->
-          <text x="13"  y="97" font-size="7.5" fill="#ef4444" font-family="system-ui" text-anchor="middle">NO</text>
+          <text x="13"  y="97" font-size="7.5" fill="#ef4444" font-family="system-ui" text-anchor="middle">CRIT</text>
           <text x="38"  y="46" font-size="7.5" fill="#f97316" font-family="system-ui" text-anchor="middle">LOW</text>
-          <text x="100" y="19" font-size="7.5" fill="#f59e0b" font-family="system-ui" text-anchor="middle">MED</text>
-          <text x="162" y="46" font-size="7.5" fill="#84cc16" font-family="system-ui" text-anchor="middle">HIGH</text>
-          <text x="187" y="97" font-size="7.5" fill="#22c55e" font-family="system-ui" text-anchor="middle">MAX</text>
+          <text x="100" y="19" font-size="7.5" fill="#f59e0b" font-family="system-ui" text-anchor="middle">FAIR</text>
+          <text x="162" y="46" font-size="7.5" fill="#84cc16" font-family="system-ui" text-anchor="middle">GOOD</text>
+          <text x="187" y="97" font-size="7.5" fill="#22c55e" font-family="system-ui" text-anchor="middle">SAFE</text>
 
           <!-- Needle group — rotates around (100, 100) -->
           <g id="gaugeNeedleGroup" style="transform-origin: 100px 100px; transform: rotate(-90deg); transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);">
@@ -89,6 +89,20 @@
 
         <div id="gaugeStatus" class="gauge-status">—</div>
         <div id="gaugeHint"   class="gauge-hint"></div>
+      </div>
+
+      <!-- Health Detail Panel -->
+      <div class="health-panel" id="healthPanel" style="display:none;">
+        <div class="health-kv">
+          <span class="health-k">Migration Risk</span>
+          <span class="health-v" id="migrationRisk">—</span>
+        </div>
+        <div class="health-kv">
+          <span class="health-k">Browser Load</span>
+          <span class="health-v" id="browserLoad">—</span>
+        </div>
+        <div class="health-reasons" id="healthReasons" style="display:none;"></div>
+        <div class="health-action" id="healthAction"></div>
       </div>
 
       <!-- Stats: YOU / AI / TOTAL / CODE -->

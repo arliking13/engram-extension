@@ -527,3 +527,67 @@ body {
   font-size: 11px;
   flex: 1;
 }
+
+/* ── Health Panel ────────────────────────────────────────────── */
+
+.health-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.health-kv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.health-k {
+  color: var(--text-muted);
+}
+
+.health-v {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.health-v.risk-low      { color: #22c55e; }
+.health-v.risk-medium   { color: #f59e0b; }
+.health-v.risk-high     { color: #f97316; }
+.health-v.risk-critical { color: #ef4444; }
+
+.health-reasons {
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.health-reasons ul {
+  margin: 0;
+  padding: 0 0 0 14px;
+  list-style: disc;
+}
+
+.health-reasons li {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  padding: 1px 0;
+}
+
+.health-action {
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.health-action.action-safe    { color: #22c55e; }
+.health-action.action-soon    { color: #f59e0b; }
+.health-action.action-handoff { color: #f97316; }
+.health-action.action-move    { color: #ef4444; }

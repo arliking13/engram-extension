@@ -8,6 +8,11 @@
   const runtime = typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
   const isFirefox = typeof browser !== "undefined";
 
+  const ENGRAM_VERBOSE_LOGS = false;
+  const verboseLog = (...args) => {
+    if (ENGRAM_VERBOSE_LOGS) console.debug(...args);
+  };
+
   // Storage for captured messages
   let capturedMessages = [];
   let interceptedMessages = [];
@@ -73,7 +78,7 @@
     return messages.filter((msg) => {
       const key = messageKey(msg);
       if (seen.has(key)) {
-        console.log("[Engram] duplicate skipped", msg.role, normalizeText(msg.text).slice(0, 80));
+        verboseLog("[Engram] duplicate skipped", msg.role);
         return false;
       }
       seen.add(key);
@@ -118,7 +123,7 @@
       .trim();
 
     if (skippedInternal) {
-      console.log("[Engram] skipped internal thinking");
+      verboseLog("[Engram] skipped internal thinking");
     }
 
     cleaned = collapseRepeatedText(cleaned);
@@ -134,7 +139,7 @@
       const first = normalizeText(lines.slice(0, half).join("\n"));
       const second = normalizeText(lines.slice(half).join("\n"));
       if (first && first === second) {
-        console.log("[Engram] cleaned duplicate text");
+        verboseLog("[Engram] cleaned duplicate text");
         return lines.slice(0, half).join("\n");
       }
     }
@@ -145,7 +150,7 @@
       const first = words.slice(0, half).join(" ");
       const second = words.slice(half).join(" ");
       if (first && first === second) {
-        console.log("[Engram] cleaned duplicate text");
+        verboseLog("[Engram] cleaned duplicate text");
         return first;
       }
     }
@@ -163,7 +168,7 @@
       if (!normalized.startsWith(prefix + prefix)) continue;
 
       const rest = normalized.slice(i * 2).trim();
-      console.log("[Engram] cleaned duplicate text");
+      verboseLog("[Engram] cleaned duplicate text");
       return rest ? `${prefix} ${rest}`.trim() : prefix;
     }
 
@@ -214,7 +219,7 @@
         containers.push(container);
       });
 
-      console.log("[Engram] assistant candidates found", containers.length);
+      verboseLog("[Engram] assistant candidates found", containers.length);
       return containers;
     },
 
@@ -263,7 +268,7 @@
         sourceKey: sourceKeyForNode(role, node),
       };
 
-      console.log("[Engram] message extracted", role, normalizeText(text).slice(0, 100));
+      verboseLog("[Engram] message extracted", role, normalizeText(text).slice(0, 100));
       return message;
     },
 
@@ -279,7 +284,7 @@
       const nodes = [...userNodes, ...assistantNodes];
       const messages = [];
 
-      console.log("[Engram] user messages found", userNodes.length);
+      verboseLog("[Engram] user messages found", userNodes.length);
 
       nodes.sort((a, b) => {
         if (a === b) return 0;
@@ -291,7 +296,7 @@
         if (!normalizeText(message.text)) return;
 
         if (message.role === "assistant" && isTimestampOrDateOnly(message.text)) {
-          console.log("[Engram] filtered timestamp", message.text);
+          verboseLog("[Engram] filtered timestamp", message.text);
           return;
         }
 
@@ -335,9 +340,16 @@
 
   async function performComprehensiveScan() {
     isScanning = true;
+    const t0 = performance.now();
 
     // Get all messages from DOM first, with fetch interception as fallback.
     const allMessages = captureDomMessages();
+    const scanDuration = Math.round(performance.now() - t0);
+
+    const domSize = document.querySelectorAll("*").length;
+    const renderedNodes = document.querySelectorAll(
+      '[data-testid="conversation-turn"], [data-testid="human-turn"], [data-testid="assistant-turn"]'
+    ).length;
 
     if (allMessages.length === 0) {
       isScanning = false;
@@ -349,6 +361,12 @@
         codeCount: 0,
         messages: [],
         chatId: getCurrentChatId(),
+        scanDuration,
+        totalChars: 0,
+        domSize,
+        renderedNodes,
+        url: window.location.href,
+        scannedAt: Date.now(),
       };
     }
 
@@ -356,6 +374,7 @@
     const userMessages = allMessages.filter((m) => m.role === "user");
     const aiMessages = allMessages.filter((m) => m.role === "assistant");
     const codeBlocks = allMessages.flatMap((m) => m.codeBlocks || []);
+    const totalChars = allMessages.reduce((sum, m) => sum + (m.text?.length || 0), 0);
 
     // Send completion status
     isScanning = false;
@@ -367,6 +386,12 @@
       codeCount: codeBlocks.length,
       messages: allMessages,
       chatId: getCurrentChatId(),
+      scanDuration,
+      totalChars,
+      domSize,
+      renderedNodes,
+      url: window.location.href,
+      scannedAt: Date.now(),
     };
 
     sendNewMessages(allMessages);
@@ -405,7 +430,7 @@
     messages.forEach((message) => {
       const key = messageKey(message);
       if (sentMessageKeys.has(key)) {
-        console.log("[Engram] duplicate skipped", message.role, normalizeText(message.text).slice(0, 80));
+        verboseLog("[Engram] duplicate skipped", message.role);
         return;
       }
 
@@ -422,7 +447,7 @@
       totalCount: messages.length,
     });
 
-    console.log("[Engram] message sent to background", newMessages.length);
+    verboseLog("[Engram] message sent to background", newMessages.length);
   }
 
   let lastMessageCount = 0;
@@ -448,7 +473,7 @@
   }
 
   function handleDomMutation() {
-    console.log("[Engram] mutation observed");
+    verboseLog("[Engram] mutation observed");
     const messages = captureDomMessages();
     sendNewMessages(messages);
     updateHealthSignals(messages);
@@ -471,5 +496,5 @@
   // Initial DOM capture.
   handleDomMutation();
 
-  console.log("[Engram] Claude.ai parser active with DOM mutation capture");
+  verboseLog("[Engram] Claude.ai parser active with DOM mutation capture");
 })();
