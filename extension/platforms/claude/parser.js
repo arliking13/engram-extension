@@ -9,6 +9,8 @@
   const isFirefox = typeof browser !== "undefined";
 
   const ENGRAM_VERBOSE_LOGS = false;
+  const ENGRAM_WIDGET_ID = "engram-mini-health-widget";
+  const ENGRAM_WIDGET_STYLE_ID = "engram-mini-health-style";
   const verboseLog = (...args) => {
     if (ENGRAM_VERBOSE_LOGS) console.debug(...args);
   };
@@ -500,7 +502,25 @@
     });
   }
 
-  function handleDomMutation() {
+  function isWidgetNode(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    return node.id === ENGRAM_WIDGET_ID || !!node.closest?.("#" + ENGRAM_WIDGET_ID);
+  }
+
+  function isWidgetOnlyMutation(mutation) {
+    if (isWidgetNode(mutation.target)) return true;
+
+    const changedNodes = [
+      ...Array.from(mutation.addedNodes || []),
+      ...Array.from(mutation.removedNodes || []),
+    ].filter((node) => node.nodeType === Node.ELEMENT_NODE);
+
+    return changedNodes.length > 0 && changedNodes.every(isWidgetNode);
+  }
+
+  function handleDomMutation(mutations = []) {
+    if (mutations.length && mutations.every(isWidgetOnlyMutation)) return;
+
     verboseLog("[Engram] mutation observed");
     const messages = captureDomMessages();
     sendNewMessages(messages);
@@ -525,4 +545,495 @@
   handleDomMutation();
 
   verboseLog("[Engram] Claude.ai parser active with DOM mutation capture");
+
+  // ── Engram Mini Health Widget ─────────────────────────────────────────────
+  // Safety: widget DOM is updated from its own 3s interval only — never from
+  // MutationObserver. Drag uses pointer events + rAF; position persists to storage.
+
+  const _wId   = ENGRAM_WIDGET_ID;
+  const _wStId = ENGRAM_WIDGET_STYLE_ID;
+  const _wStor = isFirefox ? browser.storage.local : chrome.storage.local;
+
+  let _wEl        = null;
+  let _wEnabled   = false;
+  let _wCollapsed = true;
+  let _wLastKey   = "";
+  let _wPos       = null;  // { left, top } in px, null = use CSS default (bottom/right)
+  let _wSnapshot  = null;
+  let _wSnapshotsByChatId = {};
+
+  // Drag state
+  let _wDragging    = false;
+  let _wDragMoved   = false;
+  let _wDragStartX  = 0;
+  let _wDragStartY  = 0;
+  let _wDragElX     = 0;
+  let _wDragElY     = 0;
+  let _wClickTarget = null;
+  let _wRafId       = null;
+  const _wMargin    = 8;
+
+  function _wClamp(left, top) {
+    const w = _wEl ? (_wEl.offsetWidth  || 160) : 160;
+    const h = _wEl ? (_wEl.offsetHeight || 40)  : 40;
+    return {
+      left: Math.max(_wMargin, Math.min(left, window.innerWidth  - w - _wMargin)),
+      top:  Math.max(_wMargin, Math.min(top,  window.innerHeight - h - _wMargin)),
+    };
+  }
+
+  function _wSavePos() {
+    if (!_wPos) return;
+    try {
+      if (isFirefox) { _wStor.set({ engramWidgetPos: _wPos }).catch(() => {}); }
+      else           { _wStor.set({ engramWidgetPos: _wPos }); }
+    } catch (_) {}
+  }
+
+  function _wApplyPos(left, top) {
+    if (!_wEl) return;
+    const c = _wClamp(left, top);
+    _wEl.style.left   = c.left + "px";
+    _wEl.style.top    = c.top + "px";
+    _wEl.style.right  = "auto";
+    _wEl.style.bottom = "auto";
+    _wPos = c;
+  }
+
+  function _wNormalizeUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.origin + parsed.pathname;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function _wMatchesCurrentChat(snapshot) {
+    if (!snapshot) return false;
+
+    const currentChatId = getCurrentChatId();
+    if (
+      snapshot.chatId &&
+      snapshot.chatId !== "unknown" &&
+      currentChatId &&
+      currentChatId !== "unknown"
+    ) {
+      return snapshot.chatId === currentChatId;
+    }
+
+    const savedUrl = _wNormalizeUrl(snapshot.sourceUrl || "");
+    const currentUrl = _wNormalizeUrl(window.location.href);
+    return !!savedUrl && savedUrl === currentUrl;
+  }
+
+  function _wCurrentSnapshotKeys() {
+    const keys = [];
+    const currentChatId = getCurrentChatId();
+    if (currentChatId && currentChatId !== "unknown") keys.push("chat:" + currentChatId);
+
+    const currentUrl = _wNormalizeUrl(window.location.href);
+    if (currentUrl) keys.push("url:" + currentUrl);
+
+    return keys;
+  }
+
+  function _wFindExactSnapshot() {
+    const keys = _wCurrentSnapshotKeys();
+    for (const key of keys) {
+      if (_wSnapshotsByChatId[key] && _wMatchesCurrentChat(_wSnapshotsByChatId[key])) {
+        return _wSnapshotsByChatId[key];
+      }
+    }
+
+    return _wMatchesCurrentChat(_wSnapshot) ? _wSnapshot : null;
+  }
+
+  function _wSnapshotColor(label) {
+    if (label === "Safe") return "#22c55e";
+    if (label === "Good") return "#84cc16";
+    if (label === "Fair") return "#f59e0b";
+    if (label === "Risky") return "#f97316";
+    return "#ef4444";
+  }
+
+  function _wFormatTime(ts) {
+    if (!ts) return "—";
+    return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function _wLiveStatus(total, code) {
+    if (total >= 250 || code >= 80) {
+      return { label: "Critical", color: "#ef4444" };
+    }
+    if (total >= 120 || code >= 30) {
+      return { label: "Risky", color: "#f97316" };
+    }
+    if (total >= 60 || code >= 10) {
+      return { label: "Fair", color: "#f59e0b" };
+    }
+    return { label: "Safe", color: "#22c55e" };
+  }
+
+  function _wLiveStats() {
+    const msgs = captureDomMessages();
+    const total = msgs.length;
+    if (!total) return { mode: "empty", hasData: false };
+
+    const user = msgs.filter(m => m.role === "user").length;
+    const ai = msgs.filter(m => m.role === "assistant").length;
+    const code = msgs.flatMap(m => m.codeBlocks || []).length;
+    const status = _wLiveStatus(total, code);
+
+    return {
+      mode: "live",
+      hasData: true,
+      total,
+      user,
+      ai,
+      code,
+      label: status.label,
+      color: status.color,
+      source: "Visible chat activity",
+      accuracy: "Estimated",
+      hint: "Full scan creates handoff-ready report.",
+    };
+  }
+
+  function _wStats() {
+    const exactSnapshot = _wFindExactSnapshot();
+    if (!exactSnapshot) return _wLiveStats();
+
+    const stats = exactSnapshot.stats || {};
+    const label = exactSnapshot.healthLabel || exactSnapshot.statusLabel || "Not scanned";
+    return {
+      mode: "exact",
+      hasData: true,
+      total: stats.total || 0,
+      user: stats.userCount || 0,
+      ai: stats.aiCount || 0,
+      code: stats.codeCount || 0,
+      label,
+      color: exactSnapshot.healthColor || _wSnapshotColor(label),
+      risk: exactSnapshot.migrationRisk || "—",
+      load: exactSnapshot.browserLoad || "—",
+      source: "Last scan",
+      time: _wFormatTime(exactSnapshot.scannedAt),
+      scannedAt: exactSnapshot.scannedAt || 0,
+    };
+  }
+
+  // _wRender: no onclick on compact row — toggle is handled by _wSetupDrag pointerup.
+  // Only the close button keeps its own onclick (pointerdown guard excludes it from drag).
+  function _wRender(st) {
+    if (!_wEl) return;
+
+    if (!st.hasData && _wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact'>" +
+          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>Waiting for chat</span>" +
+        "</div>";
+      return;
+    }
+
+    if (!st.hasData) {
+      _wEl.innerHTML =
+        "<div class='ew-head'>" +
+          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+        "</div>" +
+        "<div class='ew-body'>" +
+          "<div class='ew-hint ew-hint-expanded'>No readable chat data yet.</div>" +
+        "</div>";
+      _wEl.querySelector(".ew-close").onclick = _wToggle;
+      return;
+    }
+
+    if (st.mode === "live" && _wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact' title='Estimated from visible chat data. Click to expand'>" +
+          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-badge' style='color:" + st.color + "'>" + st.label + "</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>" + st.total + " msgs</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-est'>est.</span>" +
+        "</div>";
+      return;
+    }
+
+    if (st.mode === "live") {
+      _wEl.innerHTML =
+        "<div class='ew-head'>" +
+          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+        "</div>" +
+        "<div class='ew-body'>" +
+          "<div class='ew-kv'><span class='ew-k'>Status</span>" +
+            "<span class='ew-v' style='color:" + st.color + "'>" + st.label + "</span></div>" +
+          "<div class='ew-subtle'>Based on visible chat activity</div>" +
+          "<div class='ew-hr'></div>" +
+          "<div class='ew-kv'><span class='ew-k'>Messages</span><span class='ew-v'>" + st.total + "</span></div>" +
+          "<div class='ew-kv'><span class='ew-k'>Code blocks</span><span class='ew-v'>" + st.code + "</span></div>" +
+          "<div class='ew-kv'><span class='ew-k'>Accuracy</span><span class='ew-v'>" + st.accuracy + "</span></div>" +
+          "<div class='ew-hint ew-hint-expanded'>" + st.hint + "</div>" +
+        "</div>";
+      _wEl.querySelector(".ew-close").onclick = _wToggle;
+      return;
+    }
+
+    if (_wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact' title='Click to expand'>" +
+          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-badge' style='color:" + st.color + "'>" + st.label + "</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>" + st.total + " msgs</span>" +
+        "</div>";
+      return;
+    }
+
+    _wEl.innerHTML =
+      "<div class='ew-head'>" +
+        "<span class='ew-logo'>&#x2B21; Engram</span>" +
+        "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+      "</div>" +
+      "<div class='ew-body'>" +
+        "<div class='ew-kv'><span class='ew-k'>Status</span>" +
+          "<span class='ew-v' style='color:" + st.color + "'>" + st.label + "</span></div>" +
+        "<div class='ew-kv'><span class='ew-k'>Risk</span><span class='ew-v'>" + st.risk + "</span></div>" +
+        "<div class='ew-kv'><span class='ew-k'>Load</span><span class='ew-v'>" + st.load + "</span></div>" +
+        "<div class='ew-hr'></div>" +
+        "<div class='ew-kv'><span class='ew-k'>Messages</span><span class='ew-v'>" + st.total + "</span></div>" +
+        "<div class='ew-kv'><span class='ew-k'>Code blocks</span><span class='ew-v'>" + st.code + "</span></div>" +
+        "<div class='ew-kv'><span class='ew-k'>Accuracy</span><span class='ew-v'>Full scan</span></div>" +
+        "<div class='ew-time'>Last scan: " + st.time + "</div>" +
+      "</div>";
+    _wEl.querySelector(".ew-close").onclick = _wToggle;
+  }
+
+  function _wUpdate() {
+    if (!_wEl) return;
+    const st  = _wStats();
+    const key = st.hasData
+      ? (st.mode + "|" + st.label + "|" + (st.risk || "") + "|" + (st.load || "") + "|" + st.total + "|" + st.user + "|" + st.ai + "|" + st.code + "|" + (st.scannedAt || "") + "|" + _wCollapsed)
+      : ("empty|" + _wCollapsed);
+    if (key === _wLastKey) return;
+    _wLastKey = key;
+    _wRender(st);
+    if (!_wDragging && _wPos) _wApplyPos(_wPos.left, _wPos.top);
+  }
+
+  function _wToggle() {
+    _wCollapsed = !_wCollapsed;
+    try {
+      if (isFirefox) { _wStor.set({ engramWidgetCollapsed: _wCollapsed }).catch(() => {}); }
+      else           { _wStor.set({ engramWidgetCollapsed: _wCollapsed }); }
+    } catch (_) {}
+    _wLastKey = "";
+    _wUpdate();
+  }
+
+  function _wRemove() {
+    if (_wEl) { _wEl.remove(); _wEl = null; }
+    _wEnabled = false;
+    _wLastKey = "";
+    _wPos     = null;
+    const s = document.getElementById(_wStId);
+    if (s) s.remove();
+  }
+
+  function _wSetupDrag() {
+    if (!_wEl) return;
+
+    _wEl.addEventListener("pointerdown", (e) => {
+      // Close button handles itself via onclick — don't capture it
+      if (e.target.closest(".ew-close")) return;
+      _wClickTarget = e.target;
+      _wEl.setPointerCapture(e.pointerId);
+      _wDragging   = true;
+      _wDragMoved  = false;
+      _wDragStartX = e.clientX;
+      _wDragStartY = e.clientY;
+      const rect   = _wEl.getBoundingClientRect();
+      _wDragElX    = rect.left;
+      _wDragElY    = rect.top;
+      _wApplyPos(rect.left, rect.top);
+      _wEl.style.cursor = "grabbing";
+      e.preventDefault(); // prevent text selection; also suppresses click in Chrome
+    });
+
+    _wEl.addEventListener("pointermove", (e) => {
+      if (!_wDragging) return;
+      const dx = e.clientX - _wDragStartX;
+      const dy = e.clientY - _wDragStartY;
+      if (!_wDragMoved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return; // dead zone
+      _wDragMoved = true;
+      const nx = _wDragElX + dx;
+      const ny = _wDragElY + dy;
+      if (_wRafId) cancelAnimationFrame(_wRafId);
+      _wRafId = requestAnimationFrame(() => {
+        if (!_wEl) return;
+        const c = _wClamp(nx, ny);
+        _wEl.style.left   = c.left + "px";
+        _wEl.style.top    = c.top + "px";
+        _wEl.style.right  = "auto";
+        _wEl.style.bottom = "auto";
+        _wRafId = null;
+      });
+    });
+
+    _wEl.addEventListener("pointerup", (e) => {
+      if (!_wDragging) return;
+      _wDragging = false;
+      _wEl.style.cursor = "";
+      if (_wRafId) { cancelAnimationFrame(_wRafId); _wRafId = null; }
+
+      if (_wDragMoved) {
+        // Persist final position
+        const rect = _wEl.getBoundingClientRect();
+        _wApplyPos(rect.left, rect.top);
+        _wSavePos();
+      } else {
+        // Simple click — toggle unless user tapped inside expanded body content
+        const inBody = _wClickTarget && _wClickTarget.closest(".ew-body");
+        if (!inBody) _wToggle();
+      }
+    });
+
+    _wEl.addEventListener("pointercancel", () => {
+      _wDragging = false;
+      _wEl.style.cursor = "";
+      if (_wRafId) { cancelAnimationFrame(_wRafId); _wRafId = null; }
+    });
+
+    // Re-clamp if viewport shrinks after a drag-positioned widget
+    window.addEventListener("resize", () => {
+      if (!_wEl || !_wPos) return;
+      _wApplyPos(_wPos.left, _wPos.top);
+    });
+  }
+
+  function _wInject() {
+    if (_wEl || document.getElementById(_wId)) return;
+
+    const style = document.createElement("style");
+    style.id = _wStId;
+    style.textContent =
+      "#" + _wId + "{position:fixed;bottom:80px;right:16px;z-index:2147483647;" +
+      "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;" +
+      "background:rgba(13,13,13,0.92);border:1px solid #252525;border-radius:10px;" +
+      "color:#e5e5e5;box-shadow:0 4px 20px rgba(0,0,0,0.5);" +
+      "backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);" +
+      "box-sizing:border-box;width:max-content;max-width:260px;height:auto;resize:none;overflow:hidden;" +
+      "user-select:none;touch-action:none;transition:opacity 0.2s;cursor:grab;}" +
+      "#" + _wId + ":hover{opacity:1!important;}" +
+      ".ew-row-compact{display:flex;align-items:center;gap:5px;padding:7px 11px;" +
+        "border-radius:10px;font-size:12px;white-space:nowrap;}" +
+      ".ew-row-compact:hover{background:rgba(255,255,255,0.04);}" +
+      ".ew-logo{color:#a78bfa;font-weight:700;font-size:11px;}" +
+      ".ew-badge{font-weight:700;font-size:11px;}" +
+      ".ew-est{color:#777;font-size:10px;font-weight:600;}" +
+      ".ew-dot{color:#444;font-size:11px;}" +
+      ".ew-muted{color:#555;font-size:11px;}" +
+      ".ew-hint{color:#777;font-size:11px;line-height:1.4;}" +
+      ".ew-hint-expanded{max-width:220px;}" +
+      ".ew-subtle{color:#777;font-size:11px;line-height:1.35;}" +
+      ".ew-head{display:flex;align-items:center;justify-content:space-between;" +
+        "padding:7px 10px 5px;border-bottom:1px solid #1e1e1e;}" +
+      ".ew-close{background:none;border:none;color:#555;cursor:pointer;" +
+        "font-size:16px;padding:0 2px;line-height:1;font-family:inherit;transition:color 0.15s;}" +
+      ".ew-close:hover{color:#aaa;}" +
+      ".ew-body{padding:6px 10px 8px;display:flex;flex-direction:column;gap:3px;}" +
+      ".ew-kv{display:flex;align-items:center;gap:4px;}" +
+      ".ew-k{color:#555;font-size:11px;min-width:64px;}" +
+      ".ew-v{font-weight:600;font-size:11px;color:#ccc;}" +
+      ".ew-ml{margin-left:8px;}" +
+      ".ew-hr{height:1px;background:#1e1e1e;margin:2px 0;}" +
+      ".ew-time{color:#444;font-size:10px;margin-top:2px;}";
+    document.head.appendChild(style);
+
+    _wEl = document.createElement("div");
+    _wEl.id = _wId;
+    _wEl.style.opacity = "0.85";
+    document.body.appendChild(_wEl);
+
+    _wSetupDrag();
+
+    // Read saved collapse state and position in a single storage call
+    try {
+      const keys = [
+        "engramWidgetCollapsed",
+        "engramWidgetPos",
+        "engramLastHealthSnapshot",
+        "engramHealthSnapshotsByChatId",
+      ];
+      const cb = (result) => {
+        if (result) {
+          if ("engramWidgetCollapsed" in result) _wCollapsed = !!result.engramWidgetCollapsed;
+          if ("engramLastHealthSnapshot" in result) _wSnapshot = result.engramLastHealthSnapshot || null;
+          if ("engramHealthSnapshotsByChatId" in result) {
+            _wSnapshotsByChatId = result.engramHealthSnapshotsByChatId || {};
+          }
+          const pos = result.engramWidgetPos;
+          if (pos && typeof pos.left === "number" && typeof pos.top === "number") {
+            _wApplyPos(pos.left, pos.top);
+          } else if (pos && typeof pos.x === "number" && typeof pos.y === "number") {
+            _wApplyPos(pos.x, pos.y);
+          }
+        }
+        _wUpdate();
+      };
+      if (isFirefox) { _wStor.get(keys).then(cb).catch(() => _wUpdate()); }
+      else           { _wStor.get(keys, cb); }
+    } catch (_) { _wUpdate(); }
+  }
+
+  function _wBootstrap() {
+    const cb = (result) => {
+      _wEnabled = !!result?.engramSettings?.showMiniHealthWidget;
+      if (_wEnabled) _wInject();
+    };
+    try {
+      if (isFirefox) { _wStor.get("engramSettings").then(cb).catch(() => {}); }
+      else           { _wStor.get("engramSettings", cb); }
+    } catch (_) {}
+
+    // React to settings changes while page is open
+    try {
+      const onChanged = isFirefox ? browser.storage.onChanged : chrome.storage.onChanged;
+      onChanged.addListener((changes, area) => {
+        if (area !== "local" || !changes.engramSettings) return;
+        const enabled = !!changes.engramSettings.newValue?.showMiniHealthWidget;
+        if (enabled && !_wEl) { _wEnabled = true;  _wInject(); }
+        if (!enabled && _wEl) { _wRemove(); }
+      });
+      onChanged.addListener((changes, area) => {
+        if (area !== "local") return;
+        let changed = false;
+        if (changes.engramLastHealthSnapshot) {
+          _wSnapshot = changes.engramLastHealthSnapshot.newValue || null;
+          changed = true;
+        }
+        if (changes.engramHealthSnapshotsByChatId) {
+          _wSnapshotsByChatId = changes.engramHealthSnapshotsByChatId.newValue || {};
+          changed = true;
+        }
+        if (!changed) return;
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
+      });
+    } catch (_) {}
+  }
+
+  // Widget refresh on its own 3s tick — never called from MutationObserver
+  setInterval(() => { if (_wEnabled && _wEl) _wUpdate(); }, 3000);
+
+  if (document.body) { _wBootstrap(); }
+  else { document.addEventListener("DOMContentLoaded", _wBootstrap); }
+
 })();

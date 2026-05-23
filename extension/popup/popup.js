@@ -54,6 +54,8 @@ function storageSet(obj) {
 
 // TODO: Replace YOUR-VERCEL-APP with the real deployed Vercel URL before Demo Day.
 const DEMO_HANDOFF_ENDPOINT = "https://YOUR-VERCEL-APP.vercel.app/api/handoff";
+const HEALTH_SNAPSHOT_KEY = "engramLastHealthSnapshot";
+const HEALTH_SNAPSHOTS_BY_CHAT_KEY = "engramHealthSnapshotsByChatId";
 
 function isDemoEndpointPlaceholder() {
   return DEMO_HANDOFF_ENDPOINT.includes("YOUR-VERCEL-APP");
@@ -64,7 +66,8 @@ const DEFAULT_SETTINGS = {
   mode: "demo",
   customProvider: "gemini",
   customApiKey: "",
-  customEndpoint: ""
+  customEndpoint: "",
+  showMiniHealthWidget: false,
 };
 let engramSettings = { ...DEFAULT_SETTINGS };
 
@@ -98,6 +101,13 @@ function applySettingsToUI() {
   if (panelCustom) panelCustom.style.display = engramSettings.mode === "custom" ? "block" : "none";
 
   updateDemoStatus();
+
+  const widgetToggle = $("btnWidgetToggle");
+  if (widgetToggle) {
+    const on = !!engramSettings.showMiniHealthWidget;
+    widgetToggle.textContent = on ? "On" : "Off";
+    widgetToggle.classList.toggle("on", on);
+  }
 }
 
 function updateModeToggle(mode) {
@@ -126,10 +136,11 @@ async function saveSettings() {
   const providerSelect   = $("selectProvider");
 
   const next = {
-    mode:           engramSettings.mode,
-    customProvider: providerSelect   ? providerSelect.value           : "gemini",
-    customApiKey:   apiKeyInput      ? apiKeyInput.value              : "",
-    customEndpoint: customEndpointEl ? customEndpointEl.value.trim()  : ""
+    mode:                engramSettings.mode,
+    customProvider:      providerSelect   ? providerSelect.value           : "gemini",
+    customApiKey:        apiKeyInput      ? apiKeyInput.value              : "",
+    customEndpoint:      customEndpointEl ? customEndpointEl.value.trim()  : "",
+    showMiniHealthWidget: !!engramSettings.showMiniHealthWidget,
   };
 
   // In Demo Mode, don't persist sensitive fields
@@ -198,7 +209,7 @@ async function tryAIHandoff() {
     await navigator.clipboard.writeText(prompt);
     $("statusBar").textContent = "✓ AI Handoff copied to clipboard!";
     $("statusBar").style.color = "#22c55e";
-    setTimeout(() => { $("statusBar").textContent = ""; }, 3000);
+    clearStatusBarLater($("statusBar").textContent, 3000);
     return true;
   } catch (e) {
     console.log("[Engram] handoff generation fallback used");
@@ -214,6 +225,18 @@ let hasLocalScanResult = false;
 let lastRenderSource = "init";
 let stateBeforeSettings = null;
 let lastHealthData = null;
+let statusClearTimer = null;
+let lastHealthSnapshotSignature = "";
+
+function clearStatusBarLater(expectedText, ms = 3000, resetColor = false) {
+  if (statusClearTimer) clearTimeout(statusClearTimer);
+  statusClearTimer = setTimeout(() => {
+    const statusBar = $("statusBar");
+    if (!statusBar || statusBar.textContent !== expectedText) return;
+    statusBar.textContent = "";
+    if (resetColor) statusBar.style.color = "";
+  }, ms);
+}
 
 function updateChatTitleEl(title) {
   const el = $("chatTitle");
@@ -283,6 +306,7 @@ function renderDone(source = "local") {
   lastHealthData = healthData;
   updateGauge(healthData.score);
   updateHealthPanel(healthData);
+  saveHealthSnapshot(scanResults, healthData);
 }
 
 function keepLocalScanResult() {
@@ -298,6 +322,22 @@ function keepLocalScanResult() {
 }
 
 // Update speedometer gauge
+function getHealthDisplay(score) {
+  if (score >= 90) {
+    return { label: "Safe", color: "#22c55e", hint: "Safe to continue." };
+  }
+  if (score >= 75) {
+    return { label: "Good", color: "#84cc16", hint: "Safe to continue." };
+  }
+  if (score >= 50) {
+    return { label: "Fair", color: "#f59e0b", hint: "Prepare a handoff soon." };
+  }
+  if (score >= 25) {
+    return { label: "Risky", color: "#f97316", hint: "Generate a handoff before continuing." };
+  }
+  return { label: "Critical", color: "#ef4444", hint: "Move to a fresh chat now." };
+}
+
 function updateGauge(score) {
   if (score === undefined) return;
 
@@ -311,28 +351,91 @@ function updateGauge(score) {
   const angle = -90 + (score / 100 * 180);
   needleGroup.style.transform = `rotate(${angle}deg)`;
 
-  let label, color, hint;
-  if (score >= 75) {
-    label = "Good";
-    color = "#22c55e";
-    hint  = "Safe to continue.";
-  } else if (score >= 50) {
-    label = "Fair";
-    color = "#f59e0b";
-    hint  = "Prepare a handoff soon.";
-  } else if (score >= 25) {
-    label = "Risky";
-    color = "#f97316";
-    hint  = "Generate a handoff before continuing.";
-  } else {
-    label = "Critical";
-    color = "#ef4444";
-    hint  = "Move to a fresh chat now.";
-  }
+  const { label, color, hint } = getHealthDisplay(score);
 
   statusEl.textContent = label;
   statusEl.style.color = color;
   if (hintEl) hintEl.textContent = hint;
+}
+
+function saveHealthSnapshot(sr, hd) {
+  if (!sr || !hd) return;
+
+  const healthDisplay = getHealthDisplay(hd.score);
+  const snapshotKey = getHealthSnapshotKey(sr);
+  const snapshot = {
+    chatId: sr.chatId || null,
+    snapshotKey,
+    sourceUrl: sr.url || "",
+    sourceTitle: sr.sourceTitle || "Untitled chat",
+    platform: sr.platform || "Claude.ai",
+    scannedAt: sr.scannedAt || Date.now(),
+
+    healthScore: hd.score,
+    healthLabel: healthDisplay.label,
+    statusLabel: healthDisplay.label,
+    healthColor: healthDisplay.color,
+    migrationRisk: hd.migrationRisk,
+    browserLoad: hd.browserLoad,
+    action: hd.action,
+    reasons: hd.reasons || [],
+
+    stats: {
+      userCount: sr.userCount || 0,
+      aiCount: sr.aiCount || 0,
+      total: sr.total || 0,
+      codeCount: sr.codeCount || 0,
+      totalChars: sr.totalChars || 0,
+    },
+  };
+
+  const signature = [
+    snapshotKey,
+    snapshot.scannedAt,
+    snapshot.healthScore,
+    snapshot.healthLabel,
+    snapshot.migrationRisk,
+    snapshot.browserLoad,
+    snapshot.stats.total,
+    snapshot.stats.codeCount,
+  ].join("|");
+  if (signature === lastHealthSnapshotSignature) return;
+  lastHealthSnapshotSignature = signature;
+
+  storageGet(HEALTH_SNAPSHOTS_BY_CHAT_KEY)
+    .then((stored) => {
+      const existing = stored?.[HEALTH_SNAPSHOTS_BY_CHAT_KEY] || {};
+      const nextMap = { ...existing, [snapshotKey]: snapshot };
+      const limitedEntries = Object.entries(nextMap)
+        .sort((a, b) => (b[1]?.scannedAt || 0) - (a[1]?.scannedAt || 0))
+        .slice(0, 20);
+
+      return storageSet({
+        [HEALTH_SNAPSHOT_KEY]: snapshot,
+        [HEALTH_SNAPSHOTS_BY_CHAT_KEY]: Object.fromEntries(limitedEntries),
+      });
+    })
+    .catch(() => {
+      return storageSet({ [HEALTH_SNAPSHOT_KEY]: snapshot });
+    })
+    .catch(() => {
+    console.log("[Engram] health snapshot save failed");
+  });
+}
+
+function normalizeHealthSnapshotUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin + parsed.pathname;
+  } catch (_) {
+    return "";
+  }
+}
+
+function getHealthSnapshotKey(sr) {
+  if (sr?.chatId && sr.chatId !== "unknown") return "chat:" + sr.chatId;
+  const normalizedUrl = normalizeHealthSnapshotUrl(sr?.url || "");
+  return normalizedUrl ? "url:" + normalizedUrl : "chat:unknown";
 }
 
 // ── Health computation ──────────────────────────────────────────
@@ -461,6 +564,8 @@ function computeHealthFromScan(sr) {
   return {
     score,
     health: score,           // alias for debug consumers
+    healthLabel: getHealthDisplay(score).label,
+    statusLabel: getHealthDisplay(score).label,
     pressure: { chatSizePressure, scanCostPressure, continuityRiskPressure, scanQualityPressure, browserLoadPressure },
     migrationRisk,
     migrationRiskClass,
@@ -999,7 +1104,7 @@ $("btnHandoff").addEventListener("click", async () => {
       statusBar.textContent = "✓ Handoff downloaded (clipboard blocked)";
       statusBar.style.color = "#22c55e";
     }
-    setTimeout(() => { statusBar.textContent = ""; }, 4000);
+    clearStatusBarLater(statusBar.textContent, 4000);
     return;
   }
 
@@ -1008,6 +1113,7 @@ $("btnHandoff").addEventListener("click", async () => {
   const res = await runtimeSendMessage({ type: "ENGRAM_GENERATE_HANDOFF" });
   if (!res) {
     statusBar.textContent = "Scan first to generate a handoff";
+    clearStatusBarLater(statusBar.textContent, 3000);
     return;
   }
   if (res.error) {
@@ -1017,17 +1123,18 @@ $("btnHandoff").addEventListener("click", async () => {
   const prompt = res.continuationPrompt || res.handoff?.continuationPrompt;
   if (!prompt) {
     statusBar.textContent = "No handoff data — scan first";
+    clearStatusBarLater(statusBar.textContent, 3000);
     return;
   }
   try {
     await navigator.clipboard.writeText(prompt);
     statusBar.textContent = "✓ Handoff copied to clipboard!";
     statusBar.style.color = "#22c55e";
+    clearStatusBarLater(statusBar.textContent, 3000);
   } catch (e) {
     statusBar.textContent = "Clipboard blocked — see console";
     statusBar.style.color = "#ef4444";
   }
-  setTimeout(() => { statusBar.textContent = ""; }, 3000);
 });
 
 // Export Migration Package (immediate, no file picker)
@@ -1037,7 +1144,7 @@ $("btnExportPackage").addEventListener("click", async () => {
   if (!scanResults) {
     statusBar.textContent = "Scan first to export a migration package";
     statusBar.style.color = "";
-    setTimeout(() => { statusBar.textContent = ""; }, 3000);
+    clearStatusBarLater(statusBar.textContent, 3000);
     return;
   }
 
@@ -1054,13 +1161,12 @@ $("btnExportPackage").addEventListener("click", async () => {
     URL.revokeObjectURL(url);
     statusBar.textContent = "✓ Migration package downloaded";
     statusBar.style.color = "#22c55e";
+    clearStatusBarLater(statusBar.textContent, 4000);
   } catch (e) {
     console.error("[Engram] package export failed", e);
     statusBar.textContent = "Package export failed";
     statusBar.style.color = "#ef4444";
   }
-
-  setTimeout(() => { statusBar.textContent = ""; }, 4000);
 });
 
 // Export Migration Package with Files (file picker first)
@@ -1070,7 +1176,7 @@ $("btnExportWithFiles").addEventListener("click", async () => {
   if (!scanResults) {
     statusBar.textContent = "Scan first to export a migration package";
     statusBar.style.color = "";
-    setTimeout(() => { statusBar.textContent = ""; }, 3000);
+    clearStatusBarLater(statusBar.textContent, 3000);
     return;
   }
 
@@ -1111,13 +1217,12 @@ $("btnExportWithFiles").addEventListener("click", async () => {
     URL.revokeObjectURL(url);
     statusBar.textContent = "✓ Migration package downloaded";
     statusBar.style.color = "#22c55e";
+    clearStatusBarLater(statusBar.textContent, 4000);
   } catch (e) {
     console.error("[Engram] package export failed", e);
     statusBar.textContent = "Package export failed";
     statusBar.style.color = "#ef4444";
   }
-
-  setTimeout(() => { statusBar.textContent = ""; }, 4000);
 });
 
 // Settings
@@ -1145,7 +1250,19 @@ $("btnClearSettings").addEventListener("click", () => {
   runtimeSendMessage({ type: "ENGRAM_RESET_ALL" }).then(() => showState("idle"));
 });
 
-// Export
+// Widget toggle — saves immediately on click
+$("btnWidgetToggle").addEventListener("click", async () => {
+  engramSettings.showMiniHealthWidget = !engramSettings.showMiniHealthWidget;
+  const btn = $("btnWidgetToggle");
+  if (btn) {
+    const on = !!engramSettings.showMiniHealthWidget;
+    btn.textContent = on ? "On" : "Off";
+    btn.classList.toggle("on", on);
+  }
+  try { await storageSet({ engramSettings }); } catch (_) {}
+});
+
+// Export Chat
 $("btnExport").addEventListener("click", () => {
   if (!scanResults) return;
 
@@ -1160,6 +1277,11 @@ $("btnExport").addEventListener("click", () => {
   a.download = `engram-${Date.now()}.md`;
   a.click();
   URL.revokeObjectURL(url);
+
+  const statusBar = $("statusBar");
+  statusBar.textContent = "✓ Chat exported";
+  statusBar.style.color = "#22c55e";
+  clearStatusBarLater(statusBar.textContent, 3000, true);
 });
 
 // Clear

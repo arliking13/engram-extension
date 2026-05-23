@@ -532,6 +532,41 @@ body {
   color: var(--text);
 }
 
+/* Settings item with stacked name + sub-label */
+.settings-item-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-item-sub {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* On/Off toggle button */
+.toggle-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.toggle-btn.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
 .settings-input-group {
   padding: 8px 12px;
   display: flex;
