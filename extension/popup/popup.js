@@ -841,13 +841,18 @@ $("btnHandoff").addEventListener("click", async () => {
 
 // Settings
 $("btnSettings").addEventListener("click", () => {
+  if (currentState === "settings") return;
   stateBeforeSettings = currentState;
   showState("settings");
   loadSettings();
 });
 
 $("btnBack").addEventListener("click", () => {
-  showState(stateBeforeSettings || "idle");
+  // Never return to settings — compute a safe fallback if stateBeforeSettings is missing or corrupted
+  const target = (stateBeforeSettings && stateBeforeSettings !== "settings")
+    ? stateBeforeSettings
+    : (scanResults ? "done" : isScanning ? "scanning" : "idle");
+  showState(target);
 });
 
 $("btnClearSettings").addEventListener("click", () => {
