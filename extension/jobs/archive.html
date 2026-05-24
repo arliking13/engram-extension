@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Engram — Job Archive</title>
+  <link rel="stylesheet" href="archive.css" />
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Header -->
+  <header class="page-header">
+    <span class="header-logo">
+      <img src="../assets/engram-icon.png" alt="" aria-hidden="true" />
+      <span class="header-logo-name">Engram</span>
+    </span>
+    <span class="sep">/</span>
+    <span class="page-title">Job Archive</span>
+    <span class="header-count" id="headerCount">0 saved</span>
+  </header>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <button class="btn-text" id="btnSelectAll">Select all</button>
+      <div class="toolbar-sep"></div>
+      <button class="btn-text" id="btnDeselectAll">Deselect all</button>
+      <div class="toolbar-sep"></div>
+      <span class="queued-badge" id="queuedCount">0 queued</span>
+    </div>
+    <button class="btn btn-primary" id="btnBuildPackage">
+      <img class="btn-icon" src="../assets/engram-icon.png" alt="" aria-hidden="true">
+      Build Job Package
+    </button>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar" id="statusBar"></div>
+
+  <!-- Job list -->
+  <div class="job-list-wrap" id="jobListWrap" style="display:none;">
+    <div id="jobList"></div>
+  </div>
+
+  <div class="empty-state" id="emptyState">
+    No saved jobs yet.<br>Use the Engram widget on LinkedIn job pages to save jobs here.
+  </div>
+
+</div>
+
+<script src="../utils/zip-writer.js"></script>
+<script src="archive.js"></script>
+</body>
+</html>

@@ -7,6 +7,70 @@
 
 window.__engramJobs = window.__engramJobs || {};
 
+// ── Logo extraction helpers ────────────────────────────────────────────────
+
+function _getBestImageUrl(img) {
+  return img.currentSrc || img.src || img.dataset.src || img.dataset.lazySrc || '';
+}
+
+function _getCompanyInitials(company) {
+  if (!company) return '?';
+  var words = company.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+}
+
+function _findCompanyLogoUrl(company, title) {
+  var candidates = [];
+  var coLower    = (company || '').toLowerCase().slice(0, 15);
+  var titLower   = (title   || '').toLowerCase().slice(0, 15);
+
+  document.querySelectorAll('img').forEach(function (img) {
+    var src = _getBestImageUrl(img);
+    if (!src || !src.startsWith('http')) return;
+
+    var alt        = (img.alt        || '').toLowerCase();
+    var className  = (img.className  || '').toLowerCase();
+    var parentText = (img.parentElement ? (img.parentElement.innerText || '') : '').toLowerCase().trim();
+    var naturalW   = img.naturalWidth  || 0;
+    var naturalH   = img.naturalHeight || 0;
+
+    var score = 0;
+
+    // Alt text signals
+    if (alt.includes('company logo')) score += 100;
+    else if (alt.includes('logo'))    score += 50;
+    if (coLower  && alt.includes(coLower))  score += 60;
+    if (titLower && alt.includes(titLower)) score -= 10;
+
+    // Parent text signals
+    if (coLower && parentText.includes(coLower)) score += 50;
+
+    // Class signals
+    if (className.includes('entity') || className.includes('company') || className.includes('logo')) score += 40;
+    if (className.includes('avatar') || className.includes('profile')) score -= 20;
+
+    // Size signals — logos are typically square-ish and 40–200px
+    if (naturalW > 0 && naturalH > 0) {
+      var ratio = naturalW / naturalH;
+      if (ratio > 0.7 && ratio < 1.4) score += 30;
+      if (naturalW >= 40 && naturalW <= 200) score += 20;
+    }
+
+    // Negative signals
+    if (alt.includes('profile') || alt.includes('user') || alt.includes('applicant')) score -= 40;
+    if (src.includes('ghost') || src.includes('placeholder') || src.includes('default')) score -= 30;
+
+    if (score > 30) candidates.push({ src: src, score: score });
+  });
+
+  if (!candidates.length) return null;
+  candidates.sort(function (a, b) { return b.score - a.score; });
+  return candidates[0].src;
+}
+
+var _lastLoggedJobId = null;
+
 window.__engramJobs.extractJob = function () {
 
   function firstText(selectors, root) {
@@ -335,6 +399,18 @@ window.__engramJobs.extractJob = function () {
     if (found) { location = found; locationSource = 'regex-topcard-lines'; }
   }
 
+  // "Location:" / "Work location:" / "Office:" label in description — catches address lines
+  if (!location && description) {
+    const labelM = description.match(/^(?:Work\s+)?(?:[Ll]ocation|[Oo]ffice)[:\s]+(.{3,150})/m);
+    if (labelM) {
+      const candidate = labelM[1].trim().split(/[\n;]/)[0].trim();
+      if (candidate && candidate.length >= 3 && candidate.length < 150) {
+        location = candidate;
+        locationSource = 'desc-label';
+      }
+    }
+  }
+
   // Description "Located in / based in" phrase — explicit, authoritative
   if (!location && description) {
     const m = description.match(
@@ -418,34 +494,57 @@ window.__engramJobs.extractJob = function () {
     }
   }
 
+  // ── Company logo ───────────────────────────────────────────────────────────
+  var companyLogoUrl = null;
+  try {
+    companyLogoUrl = _findCompanyLogoUrl(company, title);
+  } catch (_) {}
+
+  // Extract LinkedIn job ID for canonical URL
+  const _rawUrl  = window.location.href;
+  const _srcId   = (_rawUrl.match(/\/jobs\/view\/([\w-]+)/) ||
+                    _rawUrl.match(/[?&]currentJobId=([\w-]+)/));
+  const sourceJobId   = _srcId ? _srcId[1] : null;
+  const canonicalUrl  = sourceJobId
+    ? 'https://www.linkedin.com/jobs/view/' + sourceJobId + '/'
+    : _rawUrl.split('?')[0];
+
   const job = {
-    source:       'linkedin',
+    source:          'linkedin',
+    sourceJobId,
     title,
     company,
     location,
     remoteStatus,
     salary,
     description,
-    url:          window.location.href,
-    capturedAt:   Date.now(),
+    companyLogoUrl,
+    companyInitials: _getCompanyInitials(company),
+    url:             _rawUrl,
+    canonicalUrl,
+    capturedAt:      Date.now(),
   };
 
-  console.log('[Engram] LinkedIn extraction result', {
-    title:              job.title,
-    company:            job.company,
-    location:           job.location,
-    locationSource,
-    remoteStatus:       job.remoteStatus,
-    remoteStatusSource,
-    topCardSource,
-    topCardLevel,
-    topCardHasBadge,
-    topCardSnippet:     topCardText
-      ? topCardText.slice(0, 160).replace(/\n+/g, ' | ')
-      : '(none)',
-    hasSalary:          !!job.salary,
-    hasDescription:     !!job.description,
-  });
+  if (sourceJobId && sourceJobId !== _lastLoggedJobId) {
+    _lastLoggedJobId = sourceJobId;
+    console.log('[Engram] LinkedIn extraction result', {
+      title:              job.title,
+      company:            job.company,
+      location:           job.location,
+      locationSource,
+      remoteStatus:       job.remoteStatus,
+      remoteStatusSource,
+      topCardSource,
+      topCardLevel,
+      topCardHasBadge,
+      topCardSnippet:     topCardText
+        ? topCardText.slice(0, 160).replace(/\n+/g, ' | ')
+        : '(none)',
+      hasSalary:          !!job.salary,
+      hasDescription:     !!job.description,
+      companyLogoUrl:     job.companyLogoUrl,
+    });
+  }
 
   return job;
 };

@@ -107,6 +107,10 @@
                                      {
                                          "resources":  ["assets/engram-icon.png"],
                                          "matches":    ["https://chatgpt.com/*", "https://chat.openai.com/*"]
+                                     },
+                                     {
+                                         "resources":  ["assets/engram-icon.png"],
+                                         "matches":    ["https://www.linkedin.com/jobs/*", "https://*.linkedin.com/jobs/*"]
                                      }
                                  ]
 }

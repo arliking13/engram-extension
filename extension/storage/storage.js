@@ -4,7 +4,7 @@
  * Global settings and templates are shared across projects.
  */
 
-export class Storage {
+class Storage {
   constructor() {
     this.db = null;
     this.DB_NAME = "engram";

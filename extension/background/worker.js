@@ -1,9 +1,8 @@
 /**
  * Engram — Background Service Worker
  * Receives messages from content scripts, manages storage, handles handoff generation.
+ * Storage class is loaded as a regular script before this file (see manifest scripts array).
  */
-
-import { Storage } from "../storage/storage.js";
 
 const storage   = new Storage();
 const runtime   = typeof browser !== "undefined" ? browser.runtime   : chrome.runtime;
@@ -134,17 +133,124 @@ async function handleSwitchProject(msg) {
   return { ok: true };
 }
 
+function _extractLinkedInSourceId(url) {
+  const s = String(url || "");
+  let m = s.match(/\/jobs\/view\/([\w-]+)/);
+  if (m) return m[1];
+  m = s.match(/[?&]currentJobId=([\w-]+)/);
+  if (m) return m[1];
+  return null;
+}
+
+function _canonicalJobUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname.replace(/\/$/, "");
+  } catch (_) {
+    return String(url || "").split("?")[0];
+  }
+}
+
+async function _updateLogoCache(job) {
+  if (!job || !job.companyLogoUrl || !job.company) return;
+  try {
+    const stored = await storeApi.get("engramCompanyLogoCache");
+    const cache  = (stored && stored.engramCompanyLogoCache) || {};
+    const key    = job.company.toLowerCase().trim();
+    cache[key] = {
+      company:         job.company,
+      companyLogoUrl:  job.companyLogoUrl,
+      companyInitials: job.companyInitials || null,
+      updatedAt:       Date.now(),
+    };
+    await storeApi.set({ engramCompanyLogoCache: cache });
+  } catch (e) {
+    console.warn("[Engram] logo cache update failed", e);
+  }
+}
+
 async function handleSaveJob(msg) {
   const job = msg.job;
-  if (!job) return { error: "No job data provided" };
+  if (!job) {
+    console.error("[Engram] handleSaveJob: no job in message", msg);
+    return { error: "No job data provided" };
+  }
 
-  const stored = await storeApi.get("engramSavedJobs");
-  const jobs   = stored.engramSavedJobs || [];
-  jobs.push({ ...job, savedAt: Date.now() });
-  await storeApi.set({ engramSavedJobs: jobs });
+  let stored, jobs;
+  try {
+    stored = await storeApi.get("engramSavedJobs");
+    jobs   = stored.engramSavedJobs || [];
+  } catch (e) {
+    console.error("[Engram] handleSaveJob: storage read failed", e);
+    return { error: "Storage read failed: " + String(e) };
+  }
 
-  console.log("[Engram] job saved");
-  return { ok: true };
+  const sourceJobId  = _extractLinkedInSourceId(job.url || "");
+  const canonicalUrl = sourceJobId
+    ? "https://www.linkedin.com/jobs/view/" + sourceJobId + "/"
+    : _canonicalJobUrl(job.url || "");
+
+  const jobId = sourceJobId
+    ? ("li:" + sourceJobId)
+    : ("url:" + canonicalUrl);
+
+  const idx = jobs.findIndex(j => j.id === jobId);
+  if (idx !== -1) {
+    const ex = jobs[idx];
+    jobs[idx] = {
+      ...ex,
+      title:           job.title           || ex.title,
+      company:         job.company         || ex.company,
+      location:        job.location        || ex.location,
+      remoteStatus:    job.remoteStatus    || ex.remoteStatus,
+      salary:          job.salary          || ex.salary,
+      description:     job.description     || ex.description,
+      companyLogoUrl:  job.companyLogoUrl  || ex.companyLogoUrl  || null,
+      companyInitials: job.companyInitials || ex.companyInitials || null,
+      canonicalUrl,
+      updatedAt:       Date.now(),
+    };
+    try {
+      await storeApi.set({ engramSavedJobs: jobs });
+    } catch (e) {
+      console.error("[Engram] handleSaveJob: storage write failed", e);
+      return { error: "Storage write failed: " + String(e) };
+    }
+    await _updateLogoCache(job);
+    console.log("[Engram] job updated (dedup)", jobId);
+    return { ok: true, id: jobId, isNew: false, savedCount: jobs.length };
+  }
+
+  const newJob = {
+    id:              jobId,
+    source:          "linkedin",
+    sourceJobId:     sourceJobId || null,
+    title:           job.title           || null,
+    company:         job.company         || null,
+    location:        job.location        || null,
+    remoteStatus:    job.remoteStatus    || null,
+    salary:          job.salary          || null,
+    description:     job.description     || null,
+    companyLogoUrl:  job.companyLogoUrl  || null,
+    companyInitials: job.companyInitials || null,
+    url:             job.url             || null,
+    canonicalUrl,
+    capturedAt:      job.capturedAt      || Date.now(),
+    updatedAt:       Date.now(),
+    queued:          true,
+    usedInPackages:  [],
+    notes:           "",
+  };
+  jobs.push(newJob);
+  try {
+    await storeApi.set({ engramSavedJobs: jobs });
+  } catch (e) {
+    console.error("[Engram] handleSaveJob: storage write failed", e);
+    return { error: "Storage write failed: " + String(e) };
+  }
+  await _updateLogoCache(job);
+  console.log("[Engram] job saved", jobId, "total:", jobs.length);
+  return { ok: true, id: jobId, isNew: true, savedCount: jobs.length };
 }
 
 // ── Handoff Builder ─────────────────────────────────────────────────────────

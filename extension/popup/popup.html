@@ -167,6 +167,49 @@
 
     </div>
 
+    <!-- STATE 5: LinkedIn Job Source -->
+    <div id="linkedinView" style="display: none;" class="view">
+
+      <div class="job-source-card">
+        <div class="job-source-header">
+          <span class="settings-linkedin-icon" aria-hidden="true">in</span>
+          <span class="job-source-title">LinkedIn Job Source</span>
+        </div>
+          <div class="job-preview-row" id="jobPreviewRow" style="display:none;">
+          <div class="job-prev-avatar" id="jobPrevAvatar"></div>
+          <div class="job-prev-info">
+            <div class="job-prev-title" id="jobPrevTitle"></div>
+            <div class="job-prev-meta"  id="jobPrevMeta"></div>
+          </div>
+        </div>
+        <div class="job-current-info no-job" id="currentJobInfo">See Engram widget on the page</div>
+        <div class="job-stats-row">
+          <div class="job-stat">
+            <span class="job-stat-value" id="jobSavedCount">0</span>
+            <span class="job-stat-label">SAVED</span>
+          </div>
+          <div class="job-stat">
+            <span class="job-stat-value" id="jobQueuedCount">0</span>
+            <span class="job-stat-label">QUEUED</span>
+          </div>
+        </div>
+        <div class="job-widget-row">
+          <span class="settings-item-name" style="font-size:11px;">Show widget on LinkedIn pages</span>
+          <button class="toggle-btn" id="btnLinkedInWidgetToggleMain">On</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btnBuildJobPackage">
+        <img class="btn-handoff-icon" src="../assets/engram-icon.png" alt="" aria-hidden="true">
+        Build Job Package
+      </button>
+      <button class="btn btn-ghost" id="btnCopyJobPrompt">⬡ Copy AI Prompt</button>
+      <button class="btn btn-ghost btn-sm" id="btnViewArchive">Open Job Archive ↗</button>
+
+      <div id="jobStatusBar" class="status-bar"></div>
+
+    </div>
+
     <!-- STATE 4: Settings -->
     <div id="settingsView" style="display: none;" class="view">
 
@@ -175,7 +218,7 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-label">Platforms</div>
+        <div class="settings-section-label">AI Platforms</div>
         <div class="settings-row">
           <span class="settings-platform-name">
             <img class="settings-platform-logo" src="../assets/platforms/chatgpt-logo.svg" alt="" aria-hidden="true" />
@@ -189,6 +232,27 @@
             <span>Claude.ai</span>
           </span>
           <span class="badge badge-available" id="badgeClaude">Available</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Job Sources</div>
+        <div class="settings-row">
+          <span class="settings-platform-name">
+            <span class="settings-linkedin-icon" aria-hidden="true">in</span>
+            <span>LinkedIn Jobs</span>
+          </span>
+          <span class="badge badge-available">Available</span>
+        </div>
+        <div class="settings-row">
+          <div class="settings-item-stack">
+            <span class="settings-item-name">Show LinkedIn job widget</span>
+            <span class="settings-item-sub">Floating widget on LinkedIn job pages.</span>
+          </div>
+          <button class="toggle-btn" id="btnLinkedInWidgetToggle">On</button>
+        </div>
+        <div class="settings-note">
+          Save jobs from LinkedIn job pages using the Engram widget. Build AI packages to analyze your job search.
         </div>
       </div>
 
