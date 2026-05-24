@@ -7,7 +7,9 @@
                         "storage",
                         "tabs",
                         "activeTab",
-                        "scripting"
+                        "scripting",
+                        "webRequest",
+                        "webRequestBlocking"
                     ],
     "host_permissions":  [
                              "https://claude.ai/*",
@@ -51,9 +53,20 @@
                                                 "https://chat.openai.com/*"
                                             ],
                                 "js":  [
+                                           "platforms/chatgpt/page-bridge.js"
+                                       ],
+                                "run_at":  "document_start",
+                                "world":  "MAIN"
+                            },
+                            {
+                                "matches":  [
+                                                "https://chatgpt.com/*",
+                                                "https://chat.openai.com/*"
+                                            ],
+                                "js":  [
                                            "platforms/chatgpt/parser.js"
                                        ],
-                                "run_at":  "document_idle"
+                                "run_at":  "document_start"
                             },
                             {
                                 "matches":  [

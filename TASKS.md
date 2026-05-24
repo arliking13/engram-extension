@@ -42,7 +42,7 @@ Ship a demoable Engram extension flow:
 - [x] Guard Settings view from async loadState() overwrite — currentState === "settings" early return added.
 - [x] Add AI Handoff Generation settings section: Demo Mode / Custom Mode toggle.
 - [x] Demo Mode: Vercel endpoint URL input, secure proxy note, missing-endpoint warning.
-- [x] Custom Mode: Gemini API key (password field), optional custom endpoint.
+- [x] Custom Mode: API key (password field), optional custom endpoint.
 - [x] Persist settings to browser.storage.local (Save button, storageGet/storageSet helpers).
 - [x] Disabled Test Connection placeholder (backend not yet deployed).
 - [x] tryAIHandoff(): calls Vercel endpoint if configured, fails safely back to local export.
@@ -67,6 +67,12 @@ Ship a demoable Engram extension flow:
 - [x] Create static Vercel-ready public landing page under `site/` using the DESIGN.md visual direction.
 - [x] Add lightweight landing page motion polish with scroll reveals, restrained hover states, product glow, and reduced-motion support.
 - [x] Add official Engram logo assets to landing page and popup header without changing extension behavior.
+- [x] Tighten the judge-facing landing page hero copy for Scale Without Borders and newcomer job-search workflows.
+- [x] Align site popup/mock Generate Handoff buttons with the real extension icon treatment.
+- [x] Remove stale Claude-only/Gemini/API-key/screenshot-placeholder copy from the site source.
+- [x] Verify site Risky gauge previews use the shared score-driven status/needle helper.
+- [x] Deploy the updated marketing site from `site/` to the linked Vercel production project.
+- [x] Verify production no-cache HTML contains the updated newcomer/ChatGPT+Claude copy and no stale Claude-only strings.
 - [x] Add popup platform metadata helpers for ChatGPT/Claude/Gemini generated outputs.
 - [x] Add ChatGPT popup platform display branch with OpenAI green status.
 - [x] Restore cap-based health calibration v5 for dense ChatGPT/code-heavy chats.
@@ -77,9 +83,40 @@ Ship a demoable Engram extension flow:
 - [x] Make Settings gear toggle main/settings views and remove the Back button from the current popup UI.
 - [x] Add active/pressed Settings gear state while Settings is open.
 - [x] Wire popup website CTAs to `https://engram-blush-tau.vercel.app/`.
+- [x] Fix ChatGPT parser to count every visible `[data-message-author-role]` user/assistant node.
+- [x] Document target ChatGPT DOM diagnostic and mismatch checklist.
+- [x] Remove rejected ChatGPT forced-scroll deep scan path.
+- [x] Add no-scroll ChatGPT data-layer bridge for local fetch/XHR conversation snapshot capture.
+- [x] Keep ChatGPT parser content script at `document_start` so it can receive early page-world bridge snapshots.
+- [x] Split ChatGPT page-world fetch/XHR bridge into dedicated `platforms/chatgpt/page-bridge.js` with manifest `world: "MAIN"`.
+- [x] Keep ChatGPT parser in isolated world as the snapshot receiver, scanner, visible DOM fallback, and mini-widget owner.
+- [x] Add explicit bridge diagnostics for `/backend-api/conversation/<chatId>` interception, mapping detection, and snapshot storage.
+- [x] Return ChatGPT extraction metadata for data-layer vs visible DOM fallback.
+- [x] Document ChatGPT scroll coverage audit, no-scroll architecture, and fallback limitation.
+- [x] Make popup passively hydrate from platform-matched cached health snapshots.
+- [x] Make Settings platform badges mark ChatGPT/Claude active only on their matching active-tab URLs.
+- [x] Remove visible Gemini platform/provider copy from popup Settings/UI.
+- [x] Tighten Settings title spacing.
+- [x] Remove popup empty-state mojibake platform placeholder.
+- [x] Update landing page extension mockups to current Claude.ai + ChatGPT popup/widget UI.
+- [x] Align landing page mock gauge status and needle angle with extension health thresholds.
+- [x] Refresh landing page platform copy away from Claude-only wording.
+- [x] Add official ChatGPT/OpenAI and Claude/Anthropic logo assets as small platform indicators in popup, Settings, and landing page mockups.
+- [x] Add landing page platform compatibility badges and OpenAI/Anthropic non-affiliation disclaimer.
+- [x] Align landing page Risky preview score, status label, and gauge needle so the hero/product mockups no longer disagree.
+- [x] Expand landing page popup preview card to mirror the current real extension sections: health panel, stats, handoff, migration package, and secondary actions.
+- [x] Rework landing page hero and content into a judge-facing Scale Without Borders project presentation.
+- [x] Add landing page hackathon-fit submission essentials: problem, project/team info, category, source link, demo path, tech stack, and supporting previews.
+- [x] Add landing page judging criteria fit section for impact, technical execution, creativity, and pitch/demo clarity.
+- [x] Add landing page Settings/platform support preview matching the current extension platform badge behavior.
+- [x] Remove duplicate hero local-first chip and unused older migration package mock CSS.
+- [x] Add OpenAI/Anthropic non-affiliation disclaimer to the footer.
 
 ## In Progress
 
+- [ ] Live Firefox validation that ChatGPT Scan Chat does not move scroll position and reports `chatgpt-data-layer` when a matching snapshot is captured.
+- [ ] Live Firefox validation that ChatGPT visible DOM fallback reports `visible-dom-fallback` / `partial: true` when no data-layer snapshot is available.
+- [ ] Live Firefox validation that target ChatGPT chat scans as 16 user / 3 assistant / 19 total / 108 code.
 - [ ] Live Firefox validation that Settings gear toggles main -> settings -> main on Claude and ChatGPT.
 - [ ] Live Firefox validation that popup platform row and Scan Chat body render on both Claude and ChatGPT after reload.
 - [ ] Live Firefox validation of ChatGPT end-to-end support: platform label, Scan Chat, Generate Handoff, migration package, export, and health behavior.
@@ -96,6 +133,9 @@ Ship a demoable Engram extension flow:
 - [ ] Browser visual review of `site/` landing page across desktop and mobile widths.
 - [ ] Browser visual review that landing page motion feels subtle, premium, and respects reduced-motion preferences.
 - [ ] Browser/extension visual review that official logo appears crisp in landing page header/footer/hero and popup header.
+- [ ] Browser/extension visual review that ChatGPT and Claude platform logos are aligned in popup, Settings, and landing page mockups.
+- [ ] Browser visual review that the landing page Risky gauge needle points to the low/risky zone in hero and product preview mockups.
+- [ ] Browser visual review that the judge-facing landing page explains Scale Without Borders fit within the first viewport.
 - [ ] Deploy `site/` landing page to Vercel after review.
 - [ ] Live Firefox validation of LinkedIn widget fix: open https://www.linkedin.com/jobs/search-results/?currentJobId=... — widget must appear even if it only shows "LinkedIn job page detected".
 - [ ] Confirm Copy AI Prompt copies 8-section structured prompt to clipboard.
@@ -121,7 +161,7 @@ Ship a demoable Engram extension flow:
 - [x] Remove Vercel endpoint URL input from Demo Mode — endpoint is now a built-in constant.
 - [x] Add isDemoEndpointPlaceholder() guard — fails safely to local export if constant not yet replaced.
 - [x] Add updateDemoStatus() — shows amber "not connected" or green "connected" status in Demo panel.
-- [x] Add provider select (Gemini / OpenAI) to Custom Mode.
+- [x] Add provider select to Custom Mode.
 - [x] Add API key warning note to Custom Mode.
 - [x] saveSettings() clears sensitive fields when saving in Demo Mode.
 - [x] tryAIHandoff() Demo path uses DEMO_HANDOFF_ENDPOINT constant, not user-entered value.

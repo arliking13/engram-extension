@@ -65,6 +65,12 @@ The public Engram marketing/landing page lives under `site/` as a no-dependency 
 
 Rationale: Keeps extension functionality isolated from website work, avoids frontend dependency churn during MVP development, and makes the page simple to deploy on Vercel.
 
+### ChatGPT scans must not force-scroll the page
+
+ChatGPT extraction must not move the user's scroll position during Scan Chat. Prefer locally captured page data-layer snapshots from ChatGPT's own fetch/XHR responses, installed at `document_start` in the page/main world, and fall back to the currently mounted visible DOM when no matching snapshot is available.
+
+Rationale: ChatGPT virtualizes/remounts conversation DOM while scrolling, but forced scroll UX was explicitly rejected. A no-scroll architecture preserves user control while still allowing better-than-DOM extraction when page data is available.
+
 ## Candidate Or Historical Decisions To Revisit Later
 
 - Gemini parser and Gemini API integration are not current MVP priorities unless needed for demo requirements.

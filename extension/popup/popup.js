@@ -74,6 +74,10 @@ const DEMO_HANDOFF_ENDPOINT = "https://YOUR-VERCEL-APP.vercel.app/api/handoff";
 const ENGRAM_SITE_URL = "https://engram-blush-tau.vercel.app/";
 const HEALTH_SNAPSHOT_KEY = "engramLastHealthSnapshot";
 const HEALTH_SNAPSHOTS_BY_CHAT_KEY = "engramHealthSnapshotsByChatId";
+const PLATFORM_LOGOS = {
+  chatgpt: "../assets/platforms/chatgpt-logo.svg",
+  claude: "../assets/platforms/claude-logo.svg",
+};
 
 function isDemoEndpointPlaceholder() {
   return DEMO_HANDOFF_ENDPOINT.includes("YOUR-VERCEL-APP");
@@ -82,7 +86,7 @@ function isDemoEndpointPlaceholder() {
 // Settings
 const DEFAULT_SETTINGS = {
   mode: "demo",
-  customProvider: "gemini",
+  customProvider: "openai",
   customApiKey: "",
   customEndpoint: "",
   showMiniHealthWidget: false,
@@ -113,7 +117,7 @@ function applySettingsToUI() {
 
   if (apiKeyInput)      apiKeyInput.value      = engramSettings.customApiKey   || "";
   if (customEndpointEl) customEndpointEl.value = engramSettings.customEndpoint || "";
-  if (providerSelect)   providerSelect.value   = engramSettings.customProvider || "gemini";
+  if (providerSelect)   providerSelect.value   = engramSettings.customProvider || "openai";
 
   if (panelDemo)   panelDemo.style.display   = engramSettings.mode === "demo"   ? "block" : "none";
   if (panelCustom) panelCustom.style.display = engramSettings.mode === "custom" ? "block" : "none";
@@ -163,7 +167,7 @@ async function saveSettings() {
 
   const next = {
     mode:                engramSettings.mode,
-    customProvider:      providerSelect   ? providerSelect.value           : "gemini",
+    customProvider:      providerSelect   ? providerSelect.value           : "openai",
     customApiKey:        apiKeyInput      ? apiKeyInput.value              : "",
     customEndpoint:      customEndpointEl ? customEndpointEl.value.trim()  : "",
     showMiniHealthWidget: !!engramSettings.showMiniHealthWidget,
@@ -253,6 +257,7 @@ let stateBeforeSettings = null;
 let lastHealthData = null;
 let statusClearTimer = null;
 let lastHealthSnapshotSignature = "";
+let activePlatform = "other";
 
 function clearStatusBarLater(expectedText, ms = 3000, resetColor = false) {
   if (statusClearTimer) clearTimeout(statusClearTimer);
@@ -273,7 +278,7 @@ function updateChatTitleEl(title) {
     el.title = display;
     el.classList.remove("no-title");
   } else {
-    el.textContent = "Untitled chat";
+    el.textContent = "";
     el.title = "";
     el.classList.add("no-title");
   }
@@ -345,11 +350,16 @@ function renderDone(source = "local") {
   $("codeCount").textContent = scanResults.codeCount || 0;
   $("btnScan").disabled = false;
 
-  const healthData = computeHealthFromScan(scanResults);
-  lastHealthData = healthData;
-  updateGauge(healthData.score);
-  updateHealthPanel(healthData);
-  saveHealthSnapshot(scanResults, healthData);
+  if (scanResults._fromCachedSnapshot && lastHealthData) {
+    updateGauge(lastHealthData.score);
+    updateHealthPanel(lastHealthData);
+  } else {
+    const healthData = computeHealthFromScan(scanResults);
+    lastHealthData = healthData;
+    updateGauge(healthData.score);
+    updateHealthPanel(healthData);
+    saveHealthSnapshot(scanResults, healthData);
+  }
 }
 
 function keepLocalScanResult() {
@@ -363,8 +373,71 @@ function keepLocalScanResult() {
   renderDone("local-scan");
   return true;
 }
+function renderFromCache(snapshot) {
+  if (!snapshot) return false;
+
+  console.log("[Engram][Popup] hydrating from cached snapshot", {
+    snapshotKey: snapshot.snapshotKey,
+    healthScore: snapshot.healthScore,
+    total: snapshot.stats && snapshot.stats.total,
+    platform: snapshot.platform,
+    scannedAt: snapshot.scannedAt,
+  });
+
+  scanResults = {
+    _fromCachedSnapshot: true,
+    chatId: snapshot.chatId || null,
+    url: snapshot.sourceUrl || "",
+    sourceTitle: snapshot.sourceTitle || "",
+    sourcePlatform: snapshot.platform || "unknown",
+    platform: snapshot.platform || "unknown",
+    total: (snapshot.stats && snapshot.stats.total) || 0,
+    userCount: (snapshot.stats && snapshot.stats.userCount) || 0,
+    aiCount: (snapshot.stats && snapshot.stats.aiCount) || 0,
+    codeCount: (snapshot.stats && snapshot.stats.codeCount) || 0,
+    totalChars: (snapshot.stats && snapshot.stats.totalChars) || 0,
+    messages: [],
+  };
+
+  lastHealthData = {
+    score: snapshot.healthScore,
+    health: snapshot.healthScore,
+    healthLabel: snapshot.healthLabel || snapshot.statusLabel || getHealthDisplay(snapshot.healthScore).label,
+    statusLabel: snapshot.statusLabel || snapshot.healthLabel || getHealthDisplay(snapshot.healthScore).label,
+    migrationRisk: snapshot.migrationRisk || "",
+    migrationRiskClass: getMigrationRiskClass(snapshot.migrationRisk),
+    browserLoad: snapshot.browserLoad || "",
+    action: snapshot.action || "",
+    reasons: snapshot.reasons || [],
+    pressure: {},
+  };
+
+  hasLocalScanResult = true;
+  updateChatTitleEl(snapshot.sourceTitle || null);
+
+  const ageMs = Date.now() - (snapshot.scannedAt || 0);
+  renderDone("cached-snapshot");
+
+  var statusBar = $("statusBar");
+  if (statusBar && ageMs > 30 * 60 * 1000) {
+    statusBar.textContent = "Showing data from " + Math.round(ageMs / 60000) + " min ago";
+    statusBar.style.color = "";
+  }
+
+  return true;
+}
 
 // Update speedometer gauge
+function getMigrationRiskClass(risk) {
+  switch (String(risk || "").toLowerCase()) {
+    case "low":      return "risk-low";
+    case "moderate": return "risk-medium";
+    case "elevated": return "risk-high";
+    case "critical": return "risk-critical";
+    default:         return "";
+  }
+}
+
 function getHealthDisplay(score) {
   if (score >= 90) {
     return { label: "Safe", color: "#22c55e", hint: "Safe to continue." };
@@ -475,6 +548,35 @@ function normalizeHealthSnapshotUrl(url) {
   }
 }
 
+function snapshotMatchesPlatform(snapshot, platform) {
+  if (!snapshot || !platform || platform === "other") return false;
+  return getPlatformId({
+    platform: snapshot.platform || snapshot.sourcePlatform || "",
+    sourcePlatform: snapshot.platform || snapshot.sourcePlatform || "",
+    url: snapshot.sourceUrl || snapshot.url || "",
+  }) === platform;
+}
+
+function findCachedSnapshot(url, byChat, lastSnap, platform = detectPlatformFromUrl(url)) {
+  var chatIdMatch = String(url || "").match(new RegExp("[/](?:c|chat)[/]([a-z0-9-]+)", "i"));
+  if (chatIdMatch) {
+    var key = "chat:" + chatIdMatch[1];
+    if (byChat && byChat[key] && snapshotMatchesPlatform(byChat[key], platform)) return byChat[key];
+  }
+  var normalized = normalizeHealthSnapshotUrl(url);
+  if (normalized && byChat) {
+    var urlKey = "url:" + normalized;
+    if (byChat[urlKey] && snapshotMatchesPlatform(byChat[urlKey], platform)) return byChat[urlKey];
+  }
+  if (lastSnap && snapshotMatchesPlatform(lastSnap, platform)) {
+    var lastNorm = normalizeHealthSnapshotUrl(lastSnap.sourceUrl || "");
+    if (lastNorm && normalized && lastNorm === normalized) return lastSnap;
+    var chatId = chatIdMatch ? chatIdMatch[1] : "";
+    if (chatId && lastSnap.chatId === chatId) return lastSnap;
+  }
+  return null;
+}
+
 function getHealthSnapshotKey(sr) {
   if (sr?.chatId && sr.chatId !== "unknown") return "chat:" + sr.chatId;
   const normalizedUrl = normalizeHealthSnapshotUrl(sr?.url || "");
@@ -504,7 +606,6 @@ function getPlatformDisplayName(sr = {}) {
   const platformId = getPlatformId(sr);
   if (platformId === "chatgpt") return "ChatGPT";
   if (platformId === "claude") return "Claude.ai";
-  if (platformId === "gemini") return "Gemini";
   return "Unknown";
 }
 
@@ -531,20 +632,77 @@ function detectPlatformFromUrl(url = "") {
 }
 
 function updatePlatformDisplay(platform) {
-  const iconEl = $("platformIcon");
+  const logoEl = $("platformLogo");
   const nameEl = $("platformName");
-  if (!iconEl || !nameEl) return;
+  if (!logoEl || !nameEl) return;
 
   const platformInfo = {
-    claude:  { label: "CLAUDE",  color: "#fc5000" },
-    chatgpt: { label: "CHATGPT", color: "#10a37f" },
-    gemini:  { label: "GEMINI",  color: "#524ae9" },
-    other:   { label: "â€”",      color: "#888" },
-  }[platform] || { label: "â€”", color: "#888" };
+    claude:  { label: "CLAUDE",  color: "#fc5000", logo: PLATFORM_LOGOS.claude,  alt: "Claude logo" },
+    chatgpt: { label: "CHATGPT", color: "#10a37f", logo: PLATFORM_LOGOS.chatgpt, alt: "ChatGPT logo" },
+    other:   { label: "",        color: "#888",    logo: "",                    alt: "" },
+  }[platform] || { label: "", color: "#888", logo: "", alt: "" };
 
   nameEl.textContent = platformInfo.label;
   nameEl.style.color = platformInfo.color;
-  iconEl.style.color = platformInfo.color;
+
+  if (platformInfo.logo) {
+    logoEl.src = platformInfo.logo;
+    logoEl.alt = platformInfo.alt;
+    logoEl.title = platformInfo.alt;
+    logoEl.classList.add("is-visible");
+  } else {
+    logoEl.removeAttribute("src");
+    logoEl.alt = "";
+    logoEl.title = "";
+    logoEl.classList.remove("is-visible");
+  }
+}
+
+function installImageFallbacks() {
+  document.querySelectorAll("img.platform-logo, img.settings-platform-logo").forEach((img) => {
+    img.addEventListener("error", () => {
+      img.classList.remove("is-visible");
+      img.hidden = true;
+    });
+    img.addEventListener("load", () => {
+      img.hidden = false;
+    });
+  });
+}
+
+function updateSettingsPlatforms(platform) {
+  var chatgptBadge = $("badgeChatGPT");
+  var claudeBadge  = $("badgeClaude");
+  if (!chatgptBadge || !claudeBadge) return;
+
+  chatgptBadge.className = "badge badge-available";
+  chatgptBadge.textContent = "Available";
+  claudeBadge.className = "badge badge-available";
+  claudeBadge.textContent = "Available";
+
+  if (platform === "chatgpt") {
+    chatgptBadge.className = "badge badge-active";
+    chatgptBadge.textContent = "Active";
+  } else if (platform === "claude") {
+    claudeBadge.className = "badge badge-active";
+    claudeBadge.textContent = "Active";
+  }
+}
+
+async function refreshActivePlatformFromTab() {
+  try {
+    const tabs = await tabsQuery({ active: true, currentWindow: true });
+    const url = tabs && tabs[0] ? (tabs[0].url || "") : "";
+    activePlatform = detectPlatformFromUrl(url);
+    updatePlatformDisplay(activePlatform);
+    updateSettingsPlatforms(activePlatform);
+    return { url, platform: activePlatform };
+  } catch (_) {
+    activePlatform = "other";
+    updatePlatformDisplay(activePlatform);
+    updateSettingsPlatforms(activePlatform);
+    return { url: "", platform: activePlatform };
+  }
 }
 
 // â”€â”€ Health computation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1140,11 +1298,30 @@ async function loadState() {
   const url = tabs[0].url || "";
 
   const platform = detectPlatformFromUrl(url);
+  activePlatform = platform;
   console.log("[Engram] active tab detected", { tabId, url, platform });
   updatePlatformDisplay(platform);
+  updateSettingsPlatforms(platform);
 
-  if (platform !== "other" && !isScanning && !hasLocalScanResult) {
-    renderIdle("Scan to analyze this chat", false);
+  if (!isScanning && !hasLocalScanResult) {
+    if (platform === "other") {
+      renderIdle("Open ChatGPT or Claude to scan a chat", true);
+    } else {
+      try {
+        var stored = await storageGet([HEALTH_SNAPSHOT_KEY, HEALTH_SNAPSHOTS_BY_CHAT_KEY]);
+        var byChat = (stored && stored[HEALTH_SNAPSHOTS_BY_CHAT_KEY]) || null;
+        var lastSnap = (stored && stored[HEALTH_SNAPSHOT_KEY]) || null;
+        var cachedSnap = findCachedSnapshot(url, byChat, lastSnap, platform);
+        if (cachedSnap) {
+          console.log("[Engram][Popup] hydrating from cache on open", { snapshotKey: cachedSnap.snapshotKey });
+          renderFromCache(cachedSnap);
+        } else {
+          renderIdle("Scan to analyze this chat", false);
+        }
+      } catch (_) {
+        renderIdle("Scan to analyze this chat", false);
+      }
+    }
   }
 
   // Get data from worker
@@ -1162,7 +1339,7 @@ async function loadState() {
       }
 
       if (platform === "other") {
-        renderIdle("Open Claude or ChatGPT to scan a chat", true);
+        renderIdle("Open ChatGPT or Claude to scan a chat", true);
       } else {
         renderIdle("Scan to analyze this chat", false);
       }
@@ -1179,7 +1356,7 @@ async function loadState() {
     if (platform === "other") {
       // Not on AI platform
       if (keepLocalScanResult()) return;
-      renderIdle("Open Claude or ChatGPT to scan a chat", true);
+      renderIdle("Open ChatGPT or Claude to scan a chat", true);
     } else if (scanResults && scanResults.chatId === session?.id) {
       // Already scanned this chat
       renderDone("state-match");
@@ -1417,7 +1594,7 @@ on("btnExportWithFiles", "click", async () => {
 });
 
 // Settings
-on("btnSettings", "click", () => {
+on("btnSettings", "click", async () => {
   if (currentState === "settings") {
     const target = getMainPopupState();
     stateBeforeSettings = null;
@@ -1429,6 +1606,7 @@ on("btnSettings", "click", () => {
   stateBeforeSettings = currentState;
   showState("settings");
   loadSettings();
+  await refreshActivePlatformFromTab();
 });
 
 // Website links
@@ -1510,6 +1688,7 @@ on("btnModeCustom", "click", () => {
 on("btnSaveSettings", "click", saveSettings);
 
 // Init
+installImageFallbacks();
 renderIdle();
 loadSettings();
 loadState();

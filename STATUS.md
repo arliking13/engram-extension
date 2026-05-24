@@ -54,6 +54,95 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 
 ## Last Code Change
 
+- Verified the production-site mismatch: local `site/src` and `site/dist` had the updated judge-facing content, while `https://engram-blush-tau.vercel.app/` was still serving the older deployment.
+- Confirmed the Vercel project link lives under `site/.vercel/project.json` (`projectName: engram`); the repository root has no `.vercel/project.json`.
+- Deployed from `site/` with `vercel --prod`; Vercel reported deployment `dpl_DLnHYk4x7A8hxx9ASroWmhp6nb69` ready and aliased to `https://engram-blush-tau.vercel.app`.
+- Verified production with a no-cache PowerShell request: old strings `Claude.ai MVP`, `MVP support: Claude.ai`, `Senior Remote PM Search`, and `visible while working inside Claude` were absent; new strings `AI chat continuity for newcomer job-search workflows` and `ChatGPT and Claude.ai` were present.
+- The external browser fetch tool still displayed a cached pre-deploy snapshot immediately after deploy, so use a hard refresh/no-cache check if the browser appears stale.
+- No source design polishing, extension code, parser normalization, popup/settings hydration behavior, health scoring formula, handoff generation, or ZIP writer changes were made during the deployment verification.
+- No new durable decision was made for this deployment verification.
+- Tightened the judge-facing marketing site copy and extension mockups for the current ChatGPT + Claude.ai product state.
+- Updated the hero explanation to the requested concise ChatGPT/Claude.ai job-search continuity copy while keeping the Scale Without Borders positioning.
+- Updated site popup mock Generate Handoff buttons to use the Engram icon treatment, matching the current extension popup more closely.
+- Standardized site workflow/demo copy on `Claude.ai` instead of generic `Claude` wording.
+- Strengthened platform support copy to say Engram currently supports ChatGPT and Claude.ai through platform-specific parsers and is not tied to one provider.
+- Re-ran site copy scans for stale Claude-only MVP wording, Gemini/API-key preview copy, screenshot placeholders, old `data-health-score="40"` gauge states, and mojibake; no matches remained in `site/src`.
+- No extension code, parser normalization, popup/settings hydration behavior, health scoring formula, handoff generation, ZIP writer, or site-wide formatting scripts changed in this pass.
+- No new durable decision was made for this site polish pass.
+- Completed a judge-facing site consistency pass after the Scale Without Borders presentation update.
+- Removed the duplicate standalone `Local-first` hero chip so the hero badges now map cleanly to the requested hackathon, newcomer, platform, and migration-package messages.
+- Added a Settings platform support preview card showing current-style ChatGPT Active / Claude.ai Available badges and mini-widget toggle state.
+- Moved the OpenAI/Anthropic trademark and non-affiliation disclaimer into the footer as well as the platform support section.
+- Removed unused older `mock-package` CSS so the site no longer carries a stale migration package mock variant.
+- Stale-copy scan found no remaining Claude-only MVP phrases, old platform-star mockup, `data-health-score="40"`, or screenshot-placeholder copy in `site/src`.
+- Verification passed: `node --check site/src/main.js`, `node --check site/dist/main.js`, `npm.cmd run build` from `site/`, and `git diff --check` with only existing Git config/CRLF warnings.
+- No extension code, parser behavior, health scoring formula, handoff generation, ZIP writer, or popup runtime behavior changed in this pass.
+- No new durable decision was made for this site consistency pass.
+- Reworked the marketing site into a judge-facing Scale Without Borders project presentation page.
+- Hero now positions Engram as "AI chat continuity for newcomer job-search workflows" and explains the immigrant/newcomer job-search continuity use case directly.
+- Added hackathon-fit submission essentials: project, team, challenge category, and public GitHub/source link.
+- Reframed the problem around newcomer job-search context load: job notes, prompts, resume context, role comparisons, and lost momentum when chats get heavy.
+- Updated the solution flow to the requested five-step journey: analyze jobs in ChatGPT/Claude, monitor health, warn on heavy sessions, generate handoff/ZIP, and continue in a fresh AI chat.
+- Added a judge demo path, technologies and AI tools section, and a four-card judging criteria fit section for impact, technical execution, creativity, and demo clarity.
+- Platform support copy now says ChatGPT and Claude.ai are currently supported through platform-specific parsers and keeps the OpenAI/Anthropic non-affiliation disclaimer.
+- The hero and product preview gauges continue to use the shared site helper so Risky labels and needle angles stay aligned.
+- No extension code, parser behavior, health scoring formula, handoff generation, ZIP writer, or popup runtime behavior changed in this pass.
+- Verification passed: `node --check site/src/main.js`, `node --check site/dist/main.js`, `npm.cmd run build` from `site/`, and `git diff --check` with only existing Git config/CRLF warnings.
+- No new durable decision was made for this site presentation pass.
+- Polished the marketing site extension previews to better match the current real popup UI.
+- Hero and product-preview health gauges now use a deeper Risky preview score (`30`) so the generated `Risky` label and needle both land in the low/risky zone instead of near the middle of the arc.
+- `site/src/main.js` now centralizes the site preview health bands and score clamp before deriving both status label/color and needle angle.
+- Site gauge label positions now mirror the current extension popup gauge label placement for full and compact previews.
+- Product preview popup now includes the current health panel, stats, Generate Handoff button, Migration Package card, and secondary Export/Clear actions.
+- Migration package and mini health widget previews were tightened to use the same real extension component language and Engram logo treatment.
+- No extension code, parser behavior, health scoring formula, handoff generation, ZIP writer, or popup runtime behavior changed in this pass.
+- Verification passed: `node --check site/src/main.js`, `node --check site/dist/main.js`, `npm.cmd run build` from `site/`, and `git diff --check` with only existing Git config/CRLF warnings.
+- No new durable decision was made for this site preview polish pass.
+- Added official platform logo assets for ChatGPT/OpenAI and Claude/Anthropic as small platform indicators under `extension/assets/platforms/` and `site/public/assets/platforms/`.
+- Popup platform row now shows the matching platform logo plus `CHATGPT` or `CLAUDE`; unsupported pages hide the logo and keep the clean "Open ChatGPT or Claude to scan a chat" idle message.
+- Popup Settings platform rows now show the ChatGPT and Claude.ai logos next to their Active/Available badges.
+- Landing page hero, product mockups, and platform support section now show ChatGPT and Claude.ai compatibility with matching logo badges.
+- Added the unobtrusive OpenAI/Anthropic trademark and non-affiliation disclaimer in the landing page platform support section.
+- The platform SVGs are static local files with no scripts, external references, or tracking metadata.
+- Health scoring, ChatGPT parser normalization, Claude parser behavior, handoff generation, ZIP export, popup hydration, and the page-world bridge were not changed.
+- Verification passed: `node --check extension/popup/popup.js`, `node --check extension/platforms/chatgpt/parser.js`, `node --check extension/platforms/claude/parser.js`, `node --check site/src/main.js`, `node --check site/dist/main.js`, `npm.cmd run build` from `site/`, and `git diff --check` with only existing Git config/CRLF warnings.
+- No new durable decision was made for this brand/UI asset pass.
+- Completed a popup/site UI consistency pass.
+- Popup empty platform row no longer renders the broken mojibake dash placeholder; unknown/no active platform now leaves the platform label blank and empty chat title text stays empty.
+- Landing page product mockups now show current Claude.ai + ChatGPT support, ChatGPT-style platform labels, current popup structure, and a mini widget preview using the official Engram icon.
+- Landing page mock gauge cards now use a shared `score -> label/color` and `score -> needle angle` mapping in `site/src/main.js`, matching the extension's health thresholds and needle formula.
+- Rebuilt `site/dist` from `site/src`.
+- No new durable decision was made for this UI cleanup pass.
+- Finished popup/settings hydration polish on top of the current ChatGPT extraction diff.
+- Popup open now uses a platform-aware cached health snapshot lookup before worker state returns, avoiding stale cross-platform hydration.
+- Settings platform badges now refresh from the active tab when Settings opens: ChatGPT is Active only on ChatGPT URLs, Claude.ai is Active only on Claude URLs, otherwise both remain Available.
+- Removed visible Gemini platform/provider copy from popup UI surfaces while keeping internal lowercase platform detection helpers untouched.
+- Adjusted Settings title spacing for the current compact popup layout.
+- No new durable decision was made for the popup/settings hydration pass.
+- Removed the user-triggered ChatGPT forced-scroll deep scan path before it shipped.
+- Root cause: live testing after `document_start` still showed wrapped fetch/XHR but no snapshot, while Resource Timing showed `/backend-api/conversation/<chatId>` loaded. The parser-side bridge was not reliably intercepting ChatGPT's page/main-world network calls.
+- ChatGPT now has a dedicated `extension/platforms/chatgpt/page-bridge.js` content script that runs at `document_start` in the page/main world via `world: "MAIN"` in `extension/manifest.json`.
+- `page-bridge.js` wraps `fetch` and `XMLHttpRequest`, reads cloned JSON/SSE responses locally, extracts conversation messages when available, and posts compact snapshots back to `extension/platforms/chatgpt/parser.js`.
+- `parser.js` no longer attempts inline page-script injection; it stays in the isolated content-script world as the popup scan listener, snapshot receiver, visible DOM fallback, and mini-widget owner.
+- Bridge logs now report conversation endpoint interception, response status/content-type/length, mapping detection, message count, snapshot post status, and session storage status.
+- The page-world bridge exposes `window.__ENGRAM_CHATGPT_BRIDGE_DEBUG__` and writes `engram:chatgpt:bridgeDebug` plus `engram:chatgpt:conversationSnapshot` to sessionStorage for live DevTools audits.
+- ChatGPT Scan Chat now prefers a matching captured data-layer snapshot for the current `/c/{chatId}` and reports `extractionStrategy: "chatgpt-data-layer"`; if none is available it uses the current visible role-node DOM scan with `extractionStrategy: "visible-dom-fallback"` and `partial: true`.
+- The visible DOM fallback still counts every visible `[data-message-author-role]` user/assistant node, preserves short/empty user nodes, and scopes code blocks inside each message node.
+- Updated `docs/CHATGPT_EXTRACTION_TESTS.md` with the no-scroll extraction architecture and fallback limitation.
+- Claude parser, popup design, health scoring, handoff generation, ZIP writer, manifest icons, and `site/` were not changed.
+
+## Previous Code Change
+
+- Fixed ChatGPT message counting so every visible `[data-message-author-role]` user/assistant node counts as one Engram message.
+- Root cause: ChatGPT parser skipped role nodes when `cleanMessageText(rawText)` was shorter than 2 characters. On the real Subway/code-heavy ChatGPT page, only 11 of 16 visible user nodes matched `.whitespace-pre-wrap`, so fallback text extraction plus the short-text guard dropped 3 visible user role nodes.
+- `extension/platforms/chatgpt/parser.js` now skips only hidden role nodes (`aria-hidden`, hidden ancestor, or no client rects), preserves empty/short visible role nodes, and counts code blocks scoped inside each role node.
+- Updated `docs/CHATGPT_EXTRACTION_TESTS.md` with the real DOM diagnostic, expected counts, mismatch checklist, and parser mirror adjustments.
+- Expected before/after on the target ChatGPT page: before `13 user / 3 assistant / 16 total / 108 code`; after `16 user / 3 assistant / 19 total / 108 code`.
+- Claude parser, popup design, health scoring, handoff generation, ZIP writer, manifest icons, and `site/` were not changed.
+- No new durable product or architecture decision was made.
+
+## Previous Code Change
+
 - Wired popup website CTAs to the deployed Engram landing page.
 - Added `ENGRAM_SITE_URL = "https://engram-blush-tau.vercel.app/"` in `extension/popup/popup.js`.
 - Added a cross-browser `tabsCreate()` helper and shared `openEngramSite()` handler.
@@ -363,12 +452,12 @@ All three LinkedIn job files were rewritten to fix a live test failure where no 
 - `checkDemoEndpointWarning()` removed; replaced by `updateDemoStatus()` which reads `isDemoEndpointPlaceholder()` only.
 - `inputDemoEndpoint` element and its `input` event listener removed from HTML and JS.
 - `demoEndpointWarning` element removed from HTML; replaced by `#demoStatus` div whose `className` is set dynamically.
-- Custom Mode panel updated: provider is now a `<select>` element (Gemini / OpenAI) with id `selectProvider` instead of a static text value.
+- Custom Mode panel updated: provider is now a `<select>` element with id `selectProvider` instead of a static text value.
 - Custom Mode panel now shows a warning note: "Your API key is stored locally on this device. For best security, use a restricted key or your own server-side proxy."
 - API key placeholder updated from "Paste Gemini API key" to "Paste your API key" to match the multi-provider select.
 - `saveSettings()` reads `selectProvider.value` for `customProvider`; clears `customApiKey` and `customEndpoint` when saving in Demo Mode (nothing sensitive stored in Demo).
 - `tryAIHandoff()`: Demo path checks `isDemoEndpointPlaceholder()` first, logs fallback and returns false if true; otherwise calls `DEMO_HANDOFF_ENDPOINT`. Custom path uses `customEndpoint`; returns false if empty. All failure paths log `[Engram] handoff generation fallback used`.
-- `DEFAULT_SETTINGS` now has `customProvider: "gemini"` instead of `provider: "gemini"`.
+- `DEFAULT_SETTINGS` now stores `customProvider` for the selected custom provider.
 - Privacy note updated: "No API keys are stored in the extension."
 - CSS additions: `.settings-demo-ok` (green status), `.settings-select` (cursor: pointer on select), `.settings-note-warn` (amber warning note with normal line-height).
 - Settings view stability guard unchanged: `loadState()` returns early when `currentState === "settings"`.

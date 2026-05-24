@@ -4,6 +4,87 @@ _Created 2026-05-24. Mirrors the Claude extraction stabilization process._
 
 ---
 
+## Current Real Page Diagnostic
+
+Target URL:
+
+```text
+https://chatgpt.com/c/69f14514-61b0-83ea-bd79-bca1352b3d08
+```
+
+DOM diagnostic from the real ChatGPT page:
+
+| Metric | Count |
+|---|---:|
+| allRoleNodes | 19 |
+| visibleRoleNodes | 19 |
+| hiddenRoleNodes | 0 |
+| visibleUser | 16 |
+| visibleAssistant | 3 |
+| allUser | 16 |
+| allAssistant | 3 |
+| codeBlocks | 108 |
+| markdownHits | 3 |
+| proseHits | 3 |
+| userTextHits | 11 |
+
+Expected Engram scan result for this page:
+
+| Metric | Expected |
+|---|---:|
+| userCount | 16 |
+| aiCount | 3 |
+| total | 19 |
+| codeCount | 108 |
+| messages.length | 19 |
+
+Observed previous mismatch:
+
+| Metric | Previous Engram | Expected |
+|---|---:|---:|
+| userCount | 13 | 16 |
+| aiCount | 3 | 3 |
+| total | 16 | 19 |
+| codeCount | 108 | 108 |
+
+Mismatch checklist:
+
+- If DOM visible role count is 19 but Engram total is lower, check for parser-side skips after text extraction.
+- If `visibleUser` is 16 but user extraction is lower, do not rely on `.whitespace-pre-wrap`; only 11 user nodes matched that selector in this diagnostic.
+- Empty or short visible user role nodes still count as messages.
+- Code blocks must be counted from each visible role node, not from a global document query.
+- After SPA navigation, rerun the DOM count and scan result; the URL chat ID and role nodes must belong to the current chat only.
+
+Scroll coverage audit from the same chat:
+
+| Scroll position | visibleRoleNodes | user | assistant | scoped code |
+|---:|---:|---:|---:|---:|
+| 0 | 23 | 17 | 6 | 126 |
+| 0.25 | 21 | 16 | 5 | 121 |
+| 0.5 | 24 | 17 | 7 | 146 |
+| 0.75 | 20 | 16 | 4 | 129 |
+| 1 | 22 | 17 | 5 | 121 |
+
+Conclusion: ChatGPT can virtualize/remount conversation DOM while scrolling. A single visible DOM position is not always the full conversation. Engram must not force-scroll the page during Scan Chat, so the current architecture is:
+
+- Prefer a local page data-layer snapshot captured from ChatGPT's own `fetch` / `XMLHttpRequest` responses.
+- Install `extension/platforms/chatgpt/page-bridge.js` at `document_start` with manifest `world: "MAIN"` so the bridge wraps the page's real fetch/XHR before `/backend-api/conversation/<chatId>` loads.
+- Keep `extension/platforms/chatgpt/parser.js` in the isolated content-script world as the snapshot receiver, popup scan responder, visible DOM fallback, and mini-widget owner.
+- Use `Response.clone()` before reading response bodies so ChatGPT's app behavior is not disturbed.
+- Match captured snapshots to the current `/c/{chatId}` URL before using them.
+- Fall back to the currently mounted visible `[data-message-author-role]` DOM nodes when no matching data-layer snapshot is available.
+- Report `extractionStrategy: "chatgpt-data-layer"` for captured snapshots or `extractionStrategy: "visible-dom-fallback"` with `partial: true` for mounted DOM fallback.
+- Bridge logs should show conversation endpoint URL, status, content type, response length, `mappingFound`, extracted message count, `snapshotPosted`, and content-script `sessionStored`.
+- Page-world debug should be visible as `window.__ENGRAM_CHATGPT_BRIDGE_DEBUG__`.
+- Session debug/snapshot keys should include `engram:chatgpt:bridgeDebug`, `engram:chatgpt:conversationSnapshot`, and, after the isolated parser receives the postMessage, `engramChatgptLatestSnapshot`.
+
+No-scroll limitation:
+
+- If the extension is loaded or enabled after ChatGPT already fetched the conversation, no data-layer snapshot may be available until the page is refreshed or performs another relevant fetch/XHR.
+- In that case Engram intentionally returns a visible DOM fallback rather than moving the user's scroll position.
+
+---
+
 ## Part 1 — Claude Extraction Methodology (Reference)
 
 Documented from reading `extension/platforms/claude/parser.js`, `STATUS.md`, and `HANDOFF.md`.
@@ -441,7 +522,7 @@ Prints totals only. Use this to confirm Engram and manual DOM agree.
 
   const seenNodes = new WeakSet();
   const extracted = [];
-  let skippedAriaHidden = 0, skippedEmpty = 0, skippedOtherRole = 0;
+  let skippedAriaHidden = 0, skippedNoRects = 0, skippedOtherRole = 0;
   let usingContentEl = 0, usingFallbackNode = 0;
   let totalRawLen = 0, totalCleanLen = 0;
   let noiseCleaned = 0;
@@ -456,6 +537,10 @@ Prints totals only. Use this to confirm Engram and manual DOM agree.
     if (node.getAttribute("aria-hidden") === "true" ||
         node.closest("[aria-hidden='true']")) {
       skippedAriaHidden++;
+      continue;
+    }
+    if (typeof node.getClientRects === "function" && node.getClientRects().length === 0) {
+      skippedNoRects++;
       continue;
     }
 
@@ -474,10 +559,7 @@ Prints totals only. Use this to confirm Engram and manual DOM agree.
     totalCleanLen += cleanedText.length;
     if (rawText.length !== cleanedText.length) noiseCleaned++;
 
-    if (cleanedText.length < 2) { skippedEmpty++; continue; }
-
-    const codeSource = contentEl || node;
-    const codeBlocks = extractCodeBlocks(codeSource);
+    const codeBlocks = extractCodeBlocks(node);
 
     extracted.push({ role, textLen: cleanedText.length, codeCount: codeBlocks.length });
   }
@@ -501,7 +583,7 @@ Prints totals only. Use this to confirm Engram and manual DOM agree.
   console.log(`  noise cleaned      : ${noiseCleaned} nodes had text removed by cleanMessageText`);
   console.log(`--- Skipped ---`);
   console.log(`  aria-hidden nodes  : ${skippedAriaHidden}`);
-  console.log(`  empty after clean  : ${skippedEmpty}`);
+  console.log(`  no client rects    : ${skippedNoRects}`);
   console.log(`  non-user/asst role : ${skippedOtherRole}`);
   console.log(`--- Text size ---`);
   console.log(`  raw chars total    : ${totalRawLen}`);
@@ -724,7 +806,7 @@ Run Probe D first: does scrolling reveal new nodes?
         │
         └─ Probe A > Probe C → Parser misses nodes
                               → Identify which nodes are missed:
-                                 aria-hidden? wrong role? empty after clean?
+                                 aria-hidden? wrong role? no client rects?
                               → Update chatgpt/parser.js to fix only the missed case
                               → Re-run Probe C to confirm fix
 ```
@@ -792,7 +874,7 @@ global.Node = dom.window.Node;
 
 File: `extension/platforms/chatgpt/parser.js`
 
-**Strategy**: Single strategy — `[data-message-author-role]` direct query.
+**Strategy**: No-scroll ChatGPT extraction. `platforms/chatgpt/page-bridge.js` runs at `document_start` in the page/main world, installs a fetch/XHR bridge, and Popup Scan Chat first tries a locally captured page data-layer snapshot from ChatGPT responses before falling back to visible `[data-message-author-role]` DOM nodes.
 Article-based Strategy A was removed (it silently truncated on partial matches).
 
 **Content element selection**:
@@ -802,14 +884,30 @@ Article-based Strategy A was removed (it silently truncated on partial matches).
 
 **Guards**:
 - `aria-hidden="true"` and `closest([aria-hidden])` → skipped
+- nodes with no client rects → skipped
 - `WeakSet` dedup → same DOM node never processed twice
 - `cleanMessageText()` → strips "ChatGPT said:", "You said:", footer disclaimer, button-label lines
+- Empty or short cleaned text is preserved; visible role node identity determines message count.
 
-**Code blocks**: extracted from `contentEl || node` (never the article)
+**Code blocks**: extracted from the visible role node (never global document scope)
+
+**Extraction metadata returned with `ENGRAM_SCAN_COMPLETE`**:
+- `extractionStrategy`
+- `partial`
+- `dataLayerSnapshotAvailable`
+- `dataLayerCapturedAt`
+- `dataLayerSourceUrl`
 
 **Logs emitted**:
 ```
 [Engram][ChatGPT] parser loaded
+[Engram][ChatGPT] page-world bridge installed at document_start
+[Engram][ChatGPT] listening for page-world bridge snapshots
+[Engram][ChatGPT] intercepted conversation endpoint: https://chatgpt.com/backend-api/conversation/... status=200 contentType=application/json length=N
+[Engram][ChatGPT] conversation JSON parsed: mappingFound=yes currentNodeFound=yes messages=N snapshotPosted=yes
+[Engram][ChatGPT] data-layer snapshot captured: chat=... messages=N source=... sessionStored=yes
+[Engram][ChatGPT] using data-layer snapshot: messages=N capturedAt=...
+[Engram][ChatGPT] no matching data-layer snapshot; using visible DOM fallback
 [Engram][ChatGPT] extraction strategy: role-attr-direct
 [Engram][ChatGPT] candidates found: N
 [Engram][ChatGPT] messages extracted: user=X ai=Y total=Z code=W
