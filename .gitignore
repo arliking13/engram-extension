@@ -2,3 +2,7 @@
 
 # Local AI assistant settings
 .claude/
+
+# Static landing page build output
+site/dist/
+site/node_modules/

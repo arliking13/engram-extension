@@ -1,5 +1,5 @@
-/**
- * Engram Popup — State Machine & UI Logic
+﻿/**
+ * Engram Popup â€” State Machine & UI Logic
  */
 
 const $ = (id) => document.getElementById(id);
@@ -7,6 +7,15 @@ const _api = typeof browser !== "undefined" ? browser : chrome;
 const isFirefox = typeof browser !== "undefined";
 
 console.log("[Engram] popup loaded");
+
+function on(id, eventName, handler) {
+  const el = $(id);
+  if (!el) {
+    console.warn(`[Engram] popup element missing: #${id}`);
+    return;
+  }
+  el.addEventListener(eventName, handler);
+}
 
 function runtimeSendMessage(message) {
   if (isFirefox) {
@@ -26,6 +35,14 @@ function tabsQuery(query) {
 
   return new Promise((resolve) => {
     chrome.tabs.query(query, resolve);
+  });
+}
+
+function tabsCreate(createProperties) {
+  if (isFirefox) return _api.tabs.create(createProperties);
+
+  return new Promise((resolve) => {
+    chrome.tabs.create(createProperties, resolve);
   });
 }
 
@@ -54,6 +71,7 @@ function storageSet(obj) {
 
 // TODO: Replace YOUR-VERCEL-APP with the real deployed Vercel URL before Demo Day.
 const DEMO_HANDOFF_ENDPOINT = "https://YOUR-VERCEL-APP.vercel.app/api/handoff";
+const ENGRAM_SITE_URL = "https://engram-blush-tau.vercel.app/";
 const HEALTH_SNAPSHOT_KEY = "engramLastHealthSnapshot";
 const HEALTH_SNAPSHOTS_BY_CHAT_KEY = "engramHealthSnapshotsByChatId";
 
@@ -130,6 +148,14 @@ function updateDemoStatus() {
   }
 }
 
+function openEngramSite() {
+  tabsCreate({ url: ENGRAM_SITE_URL }).catch(() => {
+    try {
+      window.open(ENGRAM_SITE_URL, "_blank", "noopener,noreferrer");
+    } catch (_) {}
+  });
+}
+
 async function saveSettings() {
   const apiKeyInput      = $("inputApiKey");
   const customEndpointEl = $("inputCustomEndpoint");
@@ -158,7 +184,7 @@ async function saveSettings() {
     const btn = $("btnSaveSettings");
     if (btn) {
       const orig = btn.textContent;
-      btn.textContent = "Saved ✓";
+      btn.textContent = "Saved âœ“";
       btn.disabled = true;
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
     }
@@ -167,7 +193,7 @@ async function saveSettings() {
   }
 }
 
-// AI handoff via Vercel proxy — fails safely back to local export
+// AI handoff via Vercel proxy â€” fails safely back to local export
 async function tryAIHandoff() {
   let endpoint;
 
@@ -207,7 +233,7 @@ async function tryAIHandoff() {
     }
 
     await navigator.clipboard.writeText(prompt);
-    $("statusBar").textContent = "✓ AI Handoff copied to clipboard!";
+    $("statusBar").textContent = "âœ“ AI Handoff copied to clipboard!";
     $("statusBar").style.color = "#22c55e";
     clearStatusBarLater($("statusBar").textContent, 3000);
     return true;
@@ -259,6 +285,23 @@ function showState(state) {
   $("scanningView").style.display = state === "scanning" ? "block" : "none";
   $("doneView").style.display     = state === "done"     ? "block" : "none";
   $("settingsView").style.display = state === "settings" ? "block" : "none";
+  updateSettingsButtonState(state === "settings");
+}
+
+function updateSettingsButtonState(isOpen) {
+  const btn = $("btnSettings");
+  if (!btn) return;
+  btn.classList.toggle("settings-active", isOpen);
+  btn.setAttribute("aria-pressed", isOpen ? "true" : "false");
+  btn.setAttribute("aria-label", isOpen ? "Close settings" : "Open settings");
+  btn.title = isOpen ? "Close settings" : "Settings";
+}
+
+function getMainPopupState() {
+  if (stateBeforeSettings && stateBeforeSettings !== "settings") return stateBeforeSettings;
+  if (scanResults) return "done";
+  if (isScanning) return "scanning";
+  return "idle";
 }
 
 function renderIdle(message = "Scan to analyze this chat", disabled = false) {
@@ -368,7 +411,7 @@ function saveHealthSnapshot(sr, hd) {
     snapshotKey,
     sourceUrl: sr.url || "",
     sourceTitle: sr.sourceTitle || "Untitled chat",
-    platform: sr.platform || "Claude.ai",
+    platform: getPlatformId(sr),
     scannedAt: sr.scannedAt || Date.now(),
 
     healthScore: hd.score,
@@ -438,64 +481,235 @@ function getHealthSnapshotKey(sr) {
   return normalizedUrl ? "url:" + normalizedUrl : "chat:unknown";
 }
 
-// ── Health computation ──────────────────────────────────────────
+function getPlatformId(sr = {}) {
+  const rawPlatform = String(sr.sourcePlatform || sr.platform || "").toLowerCase();
+  const detectedFromUrl = detectPlatformFromUrl(sr.url || "");
+
+  if (rawPlatform.includes("chatgpt") || rawPlatform.includes("openai") || detectedFromUrl === "chatgpt") {
+    return "chatgpt";
+  }
+
+  if (rawPlatform.includes("claude") || detectedFromUrl === "claude") {
+    return "claude";
+  }
+
+  if (rawPlatform.includes("gemini") || detectedFromUrl === "gemini") {
+    return "gemini";
+  }
+
+  return "unknown";
+}
+
+function getPlatformDisplayName(sr = {}) {
+  const platformId = getPlatformId(sr);
+  if (platformId === "chatgpt") return "ChatGPT";
+  if (platformId === "claude") return "Claude.ai";
+  if (platformId === "gemini") return "Gemini";
+  return "Unknown";
+}
+
+function detectPlatformFromUrl(url = "") {
+  const raw = String(url || "").toLowerCase();
+  let host = "";
+
+  try {
+    host = new URL(raw).hostname;
+  } catch (_) {
+    host = raw;
+  }
+
+  if (host === "claude.ai" || host.endsWith(".claude.ai")) return "claude";
+  if (host === "chatgpt.com" || host.endsWith(".chatgpt.com") ||
+      host === "chat.openai.com" || host.endsWith(".chat.openai.com")) {
+    return "chatgpt";
+  }
+  if (host === "gemini.google.com" || host.endsWith(".gemini.google.com")) return "gemini";
+  if (raw.includes("claude.ai")) return "claude";
+  if (raw.includes("chatgpt.com") || raw.includes("chat.openai.com")) return "chatgpt";
+  if (raw.includes("gemini.google.com")) return "gemini";
+  return "other";
+}
+
+function updatePlatformDisplay(platform) {
+  const iconEl = $("platformIcon");
+  const nameEl = $("platformName");
+  if (!iconEl || !nameEl) return;
+
+  const platformInfo = {
+    claude:  { label: "CLAUDE",  color: "#fc5000" },
+    chatgpt: { label: "CHATGPT", color: "#10a37f" },
+    gemini:  { label: "GEMINI",  color: "#524ae9" },
+    other:   { label: "â€”",      color: "#888" },
+  }[platform] || { label: "â€”", color: "#888" };
+
+  nameEl.textContent = platformInfo.label;
+  nameEl.style.color = platformInfo.color;
+  iconEl.style.color = platformInfo.color;
+}
+
+// â”€â”€ Health computation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function computeHealthFromScan(sr) {
   const msgs = sr.messages || [];
   const totalMsgs   = sr.total     || msgs.length;
   const totalChars  = sr.totalChars  || msgs.reduce((s, m) => s + (m.text?.length || 0), 0);
-  const codeCount   = sr.codeCount   || 0;
+  const codeCount   = sr.codeCount   || msgs.flatMap(m => m.codeBlocks || []).length;
   const scanDuration = sr.scanDuration || 0;
   const domSize     = sr.domSize     || 0;
   const renderedNodes = sr.renderedNodes || 0;
+  const messageLengths = msgs.map(m => (m.text || "").length);
+  const longestMessageChars =
+    sr.longestMessageChars || (messageLengths.length ? Math.max(...messageLengths) : 0);
+  const largeMessageCount =
+    sr.largeMessageCount || messageLengths.filter(length => length >= 2000).length;
+  const veryLargeMessageCount =
+    sr.veryLargeMessageCount || messageLengths.filter(length => length >= 5000).length;
+  const hugeMessageCount =
+    sr.hugeMessageCount || messageLengths.filter(length => length >= 10000).length;
+  const embeddedTranscriptDetected =
+    !!(sr.embeddedTranscriptDetected || sr.likelyEmbeddedTranscript);
 
-  // 1. Chat Size Pressure (30%)
+  const reasons = [];
+  let pressure = 0;
   let chatSizePressure = 0;
-  if (totalMsgs >= 80)     chatSizePressure += 40;
-  else if (totalMsgs >= 50) chatSizePressure += 25;
-  else if (totalMsgs >= 30) chatSizePressure += 15;
-  else if (totalMsgs >= 15) chatSizePressure += 5;
 
-  if (totalChars >= 100000)     chatSizePressure += 40;
-  else if (totalChars >= 50000) chatSizePressure += 25;
-  else if (totalChars >= 20000) chatSizePressure += 10;
+  // Calibrated v5 migration pressure: cap-based, so isolated dense signals do
+  // not over-penalize normal short chats.
+  if (totalMsgs >= 150) {
+    pressure += 26;
+    chatSizePressure += 26;
+    reasons.push("Very high message count");
+  } else if (totalMsgs >= 80) {
+    pressure += 18;
+    chatSizePressure += 18;
+    reasons.push("High message count");
+  } else if (totalMsgs >= 40) {
+    pressure += 10;
+    chatSizePressure += 10;
+    reasons.push("Moderate message count");
+  } else if (totalMsgs >= 20) {
+    pressure += 4;
+    chatSizePressure += 4;
+    reasons.push("Growing message count");
+  }
 
-  if (codeCount >= 20)     chatSizePressure += 20;
-  else if (codeCount >= 10) chatSizePressure += 10;
-  else if (codeCount >= 5)  chatSizePressure += 5;
-  chatSizePressure = Math.min(100, chatSizePressure);
+  if (totalChars >= 100000) {
+    pressure += 24;
+    chatSizePressure += 24;
+    reasons.push("Very large total text volume");
+  } else if (totalChars >= 50000) {
+    pressure += 16;
+    chatSizePressure += 16;
+    reasons.push("Large total text volume");
+  } else if (totalChars >= 25000) {
+    pressure += 8;
+    chatSizePressure += 8;
+    reasons.push("Moderate-high text volume");
+  } else if (totalChars >= 10000) {
+    const textPressure = totalMsgs >= 10 ? 8 : 5;
+    pressure += textPressure;
+    chatSizePressure += textPressure;
+    reasons.push("Moderate text volume");
+  } else if (totalChars >= 7000) {
+    pressure += 5;
+    chatSizePressure += 5;
+    reasons.push("Moderate text volume");
+  }
 
-  // 2. Scan Cost Pressure (20%)
-  let scanCostPressure = 0;
-  if (scanDuration >= 3000)     scanCostPressure += 50;
-  else if (scanDuration >= 1500) scanCostPressure += 30;
-  else if (scanDuration >= 500)  scanCostPressure += 15;
-  const charsPerMsg = totalMsgs > 0 ? totalChars / totalMsgs : 0;
-  if (charsPerMsg >= 3000)     scanCostPressure += 30;
-  else if (charsPerMsg >= 1500) scanCostPressure += 15;
-  else if (charsPerMsg >= 500)  scanCostPressure += 5;
-  scanCostPressure = Math.min(100, scanCostPressure);
+  if (codeCount >= 100) {
+    pressure += 12;
+    chatSizePressure += 12;
+    reasons.push("Extremely code-heavy chat");
+  } else if (codeCount >= 50) {
+    pressure += 10;
+    chatSizePressure += 10;
+    reasons.push("Very code-heavy chat");
+  } else if (codeCount >= 25) {
+    pressure += 8;
+    chatSizePressure += 8;
+    reasons.push("Many code blocks");
+  } else if (codeCount >= 10) {
+    pressure += 6;
+    chatSizePressure += 6;
+    reasons.push("Several code blocks");
+  } else if (codeCount >= 5) {
+    pressure += 3;
+    chatSizePressure += 3;
+    reasons.push("Some code blocks");
+  }
 
-  // 3. Continuity Risk Pressure (15%)
-  let continuityRiskPressure = 0;
+  if (longestMessageChars >= 20000) {
+    pressure += 14;
+    chatSizePressure += 14;
+    reasons.push("Huge single-message payload");
+  } else if (longestMessageChars >= 10000) {
+    pressure += 10;
+    chatSizePressure += 10;
+    reasons.push("Very large single-message payload");
+  } else if (longestMessageChars >= 5000) {
+    pressure += 6;
+    chatSizePressure += 6;
+    reasons.push("Large single-message payload");
+  }
+
+  if (hugeMessageCount >= 1 && longestMessageChars < 10000) {
+    pressure += 5;
+    chatSizePressure += 5;
+    reasons.push("Huge message detected");
+  } else if (veryLargeMessageCount >= 1 && longestMessageChars < 5000) {
+    pressure += 4;
+    chatSizePressure += 4;
+    reasons.push("Very large message detected");
+  } else if (largeMessageCount >= 2 && longestMessageChars < 5000) {
+    pressure += 3;
+    chatSizePressure += 3;
+    reasons.push("Multiple large messages detected");
+  }
+
+  if (embeddedTranscriptDetected) {
+    pressure += 6;
+    chatSizePressure += 6;
+    reasons.push("Embedded transcript-like content detected");
+  }
+
+  const denseSignalCount = [
+    totalMsgs < 10 && totalChars >= 7000,
+    totalMsgs < 10 && codeCount >= 10,
+    longestMessageChars >= 5000,
+    veryLargeMessageCount >= 1,
+    embeddedTranscriptDetected,
+    codeCount >= 50,
+    codeCount >= 100,
+  ].filter(Boolean).length;
+
+  if (denseSignalCount >= 2) {
+    reasons.push("Dense content payload");
+  }
+
+  let score = Math.max(5, Math.min(100, 100 - pressure));
+
+  if (totalMsgs < 10 && codeCount >= 10) score = Math.min(score, 86);
+  if (longestMessageChars >= 5000) score = Math.min(score, 86);
+  if (veryLargeMessageCount >= 1) score = Math.min(score, 86);
+  if (denseSignalCount >= 2) score = Math.min(score, 84);
+  if (embeddedTranscriptDetected) score = Math.min(score, 82);
+  if (codeCount >= 50) score = Math.min(score, 78);
+  if (codeCount >= 100) score = Math.min(score, 74);
+  if (totalChars >= 30000 || longestMessageChars >= 20000) score = Math.min(score, 76);
+  if (totalMsgs >= 150 || totalChars >= 100000) score = Math.min(score, 55);
+
+  score = Math.round(score);
+
+  // Continuity signals remain advisory reasons. They do not drive the v5 dense
+  // content caps, but they can explain why a handoff may be useful.
   const userText = msgs.filter(m => m.role === "user").map(m => m.text || "").join(" ").toLowerCase();
   const correctionPhrases = [
     "actually,", "wait,", "no,", "instead,", "let's reset", "start over", "ignore that", "scratch that", "never mind",
-    "ты не понял", "не так", "давай иначе", "снова", "ты усложняешь", "не то", "зачем ты", "мы же", "я уже говорил", "ты не ответил", "не выдумывай",
+    "Ñ‚Ñ‹ Ð½Ðµ Ð¿Ð¾Ð½ÑÐ»", "Ð½Ðµ Ñ‚Ð°Ðº", "Ð´Ð°Ð²Ð°Ð¹ Ð¸Ð½Ð°Ñ‡Ðµ", "ÑÐ½Ð¾Ð²Ð°", "Ñ‚Ñ‹ ÑƒÑÐ»Ð¾Ð¶Ð½ÑÐµÑˆÑŒ", "Ð½Ðµ Ñ‚Ð¾", "Ð·Ð°Ñ‡ÐµÐ¼ Ñ‚Ñ‹", "Ð¼Ñ‹ Ð¶Ðµ", "Ñ ÑƒÐ¶Ðµ Ð³Ð¾Ð²Ð¾Ñ€Ð¸Ð»", "Ñ‚Ñ‹ Ð½Ðµ Ð¾Ñ‚Ð²ÐµÑ‚Ð¸Ð»", "Ð½Ðµ Ð²Ñ‹Ð´ÑƒÐ¼Ñ‹Ð²Ð°Ð¹",
   ];
   const correctionCount = correctionPhrases.reduce((n, p) => n + (userText.split(p).length - 1), 0);
-  if (correctionCount >= 10) continuityRiskPressure += 40;
-  else if (correctionCount >= 5) continuityRiskPressure += 25;
-  else if (correctionCount >= 2) continuityRiskPressure += 10;
-  const gitCount = (userText.match(/\bgit\b|branch|commit|merge|rebase/g) || []).length;
-  if (gitCount >= 10) continuityRiskPressure += 30;
-  else if (gitCount >= 5) continuityRiskPressure += 15;
-  const todoCount = (userText.match(/\btodo\b|next step|\bnext:/g) || []).length;
-  if (todoCount >= 5) continuityRiskPressure += 20;
-  else if (todoCount >= 2) continuityRiskPressure += 10;
-  continuityRiskPressure = Math.min(100, continuityRiskPressure);
+  const continuityRiskPressure = Math.min(100, correctionCount >= 10 ? 40 : correctionCount >= 5 ? 25 : correctionCount >= 2 ? 10 : 0);
 
-  // 4. Scan Quality Pressure (5%)
   let scanQualityPressure = 0;
   const emptyMsgs = msgs.filter(m => !m.text || m.text.trim().length < 2).length;
   if (emptyMsgs >= 3) scanQualityPressure += 50;
@@ -504,7 +718,9 @@ function computeHealthFromScan(sr) {
   if (missingRole >= 1) scanQualityPressure += 30;
   scanQualityPressure = Math.min(100, scanQualityPressure);
 
-  // 5. Browser Load Pressure (30%)
+  chatSizePressure = Math.min(100, chatSizePressure);
+
+  // Browser load is intentionally separate from migration risk.
   let browserLoadPressure = 0;
   if (totalMsgs >= 250)      browserLoadPressure += 35;
   else if (totalMsgs >= 150) browserLoadPressure += 25;
@@ -518,20 +734,11 @@ function computeHealthFromScan(sr) {
   else if (totalChars >= 80000) browserLoadPressure += 15;
   browserLoadPressure = Math.min(100, browserLoadPressure);
 
-  const weightedPressure =
-    chatSizePressure   * 0.30 +
-    browserLoadPressure * 0.30 +
-    scanCostPressure   * 0.20 +
-    continuityRiskPressure * 0.15 +
-    scanQualityPressure * 0.05;
-
-  const score = Math.round(Math.max(0, Math.min(100, 100 - weightedPressure)));
-
   let migrationRisk, migrationRiskClass;
-  if (score >= 75)      { migrationRisk = "Low";      migrationRiskClass = "risk-low"; }
-  else if (score >= 55) { migrationRisk = "Medium";   migrationRiskClass = "risk-medium"; }
-  else if (score >= 30) { migrationRisk = "High";     migrationRiskClass = "risk-high"; }
-  else                  { migrationRisk = "Critical"; migrationRiskClass = "risk-critical"; }
+  if (score >= 90)      { migrationRisk = "Low";       migrationRiskClass = "risk-low"; }
+  else if (score >= 80) { migrationRisk = "Moderate";  migrationRiskClass = "risk-medium"; }
+  else if (score >= 65) { migrationRisk = "Elevated";  migrationRiskClass = "risk-high"; }
+  else                  { migrationRisk = "Critical";  migrationRiskClass = "risk-critical"; }
 
   let browserLoad;
   if (browserLoadPressure < 25)      browserLoad = "Smooth";
@@ -540,17 +747,12 @@ function computeHealthFromScan(sr) {
   else                               browserLoad = "Very Heavy";
 
   let action;
-  if (score >= 75)      action = "Safe to continue";
-  else if (score >= 55) action = "Prepare a handoff soon";
-  else if (score >= 30) action = "Generate a handoff before continuing";
-  else                  action = "Move to a fresh chat now";
+  if (score >= 90)      action = "Safe to continue";
+  else if (score >= 80) action = "Safe for now, but consider handoff soon";
+  else if (score >= 65) action = "Consider handoff soon";
+  else                  action = "Create handoff before continuing";
 
-  const reasons = [];
-  if (totalMsgs >= 80 || totalChars >= 80000 || chatSizePressure >= 60)
-    reasons.push("This chat is getting long");
-  if (codeCount >= 15)
-    reasons.push("There are many code blocks");
-  if (totalMsgs >= 120 || codeCount >= 30 || chatSizePressure >= 75 || migrationRisk === "High" || migrationRisk === "Critical")
+  if (totalMsgs >= 120 || codeCount >= 30 || totalChars >= 50000 || migrationRisk === "Elevated" || migrationRisk === "Critical")
     reasons.push("Important details may be buried above");
   if (correctionCount >= 2)
     reasons.push("The conversation has changed direction several times");
@@ -566,7 +768,7 @@ function computeHealthFromScan(sr) {
     health: score,           // alias for debug consumers
     healthLabel: getHealthDisplay(score).label,
     statusLabel: getHealthDisplay(score).label,
-    pressure: { chatSizePressure, scanCostPressure, continuityRiskPressure, scanQualityPressure, browserLoadPressure },
+    pressure: { chatSizePressure, continuityRiskPressure, scanQualityPressure, browserLoadPressure, denseSignalCount },
     migrationRisk,
     migrationRiskClass,
     browserLoad,
@@ -604,9 +806,9 @@ function updateHealthPanel(hd) {
   if (actionEl) {
     actionEl.textContent = hd.action;
     let cls = "health-action";
-    if (hd.score >= 75)      cls += " action-safe";
-    else if (hd.score >= 55) cls += " action-soon";
-    else if (hd.score >= 30) cls += " action-handoff";
+    if (hd.score >= 90)      cls += " action-safe";
+    else if (hd.score >= 80) cls += " action-soon";
+    else if (hd.score >= 65) cls += " action-handoff";
     else                     cls += " action-move";
     actionEl.className = cls;
   }
@@ -657,7 +859,7 @@ function generateHandoffMarkdown(sr, hd) {
     })
     .join("\n\n---\n\n");
 
-  // Code blocks — last 5, capped at 800 chars each
+  // Code blocks â€” last 5, capped at 800 chars each
   const allCode = msgs.flatMap(m => m.codeBlocks || []).filter(c => c.code.length > 30);
   const codeCountStat = sr.codeCount || 0;
   let codeSection;
@@ -675,7 +877,7 @@ function generateHandoffMarkdown(sr, hd) {
 
   const ts = new Date().toISOString();
   const totalKb = Math.round((sr.totalChars || 0) / 1000);
-  const riskStr = hd ? `${hd.score}% — ${hd.migrationRisk} risk` : "—";
+  const riskStr = hd ? `${hd.score}% â€” ${hd.migrationRisk} risk` : "â€”";
 
   const signalsParts = [];
   if (filePaths.length)  signalsParts.push("**File paths:**\n" + filePaths.map(p => `- \`${p}\``).join("\n"));
@@ -690,18 +892,18 @@ function generateHandoffMarkdown(sr, hd) {
 > It is based on captured chat data. Use it to continue this session in a fresh chat.
 
 ## Source
-- **Platform:** Claude.ai
+- **Platform:** ${getPlatformDisplayName(sr)}
 - **Chat Title:** ${sr.sourceTitle || "Untitled chat"}
 - **Chat ID:** ${sr.chatId || "unknown"}
 - **URL:** ${sr.url || "unknown"}
 - **Generated:** ${ts}
 
 ## Chat Health at Migration
-- **Chat Health:** ${hd ? hd.score + "%" : "—"}
-- **Migration Risk:** ${hd?.migrationRisk ?? "—"}
-- **Browser Load:** ${hd?.browserLoad ?? "—"}
+- **Chat Health:** ${hd ? hd.score + "%" : "â€”"}
+- **Migration Risk:** ${hd?.migrationRisk ?? "â€”"}
+- **Browser Load:** ${hd?.browserLoad ?? "â€”"}
 ${hd?.reasons?.length ? "- **Reasons:**\n" + hd.reasons.map(r => `  - ${r}`).join("\n") + "\n" : ""}
-- **Recommendation:** ${hd?.action ?? "—"}
+- **Recommendation:** ${hd?.action ?? "â€”"}
 
 ## Captured Stats
 - User messages: ${sr.userCount || 0}
@@ -738,7 +940,7 @@ Please acknowledge this handoff and confirm what we should focus on first.
 `;
 }
 
-// ── Migration package generators ────────────────────────────────
+// â”€â”€ Migration package generators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function generateFullChatExport(sr) {
   const msgs = sr.messages || [];
@@ -746,7 +948,7 @@ function generateFullChatExport(sr) {
   const lines = [
     "# Full Chat Export",
     "",
-    `- **Source:** Claude.ai`,
+    `- **Source:** ${getPlatformDisplayName(sr)}`,
     `- **Chat Title:** ${sr.sourceTitle || "Untitled chat"}`,
     `- **URL:** ${sr.url || "unknown"}`,
     `- **Generated:** ${ts}`,
@@ -809,24 +1011,24 @@ function generateTechnicalSignalsMd(sr) {
 
 function generateReadme(sr, hd) {
   const ts = new Date().toISOString();
-  return `# Engram Migration Package — Start Here
+  return `# Engram Migration Package â€” Start Here
 
 This package was generated by **Engram** to help you continue an AI-assisted work session in a fresh chat.
 
 ## How to use this package
 
-1. **Start with \`handoff.md\`** — paste it into your new AI chat to restore context.
-2. **Use \`full-chat-export.md\` only if more detail is needed** — it contains the full captured conversation.
+1. **Start with \`handoff.md\`** â€” paste it into your new AI chat to restore context.
+2. **Use \`full-chat-export.md\` only if more detail is needed** â€” it contains the full captured conversation.
 3. **Check \`technical-signals.md\`** for file paths, git commands, errors, and TODOs.
 4. **Check \`attachments/user-added/\`** for any files you manually included.
 5. If a referenced file is missing from the attachments, ask the user to upload it.
 
 ## Package summary
 
-- **Source:** Claude.ai
+- **Source:** ${getPlatformDisplayName(sr)}
 - **Chat Title:** ${sr.sourceTitle || "Untitled chat"}
 - **URL:** ${sr.url || "unknown"}
-- **Chat Health:** ${hd ? hd.score + "%" : "—"} (${hd?.migrationRisk ?? "—"} risk)
+- **Chat Health:** ${hd ? hd.score + "%" : "â€”"} (${hd?.migrationRisk ?? "â€”"} risk)
 - **Total messages:** ${sr.total || 0}
 - **Generated:** ${ts}
 
@@ -842,7 +1044,7 @@ This package was generated by **Engram** to help you continue an AI-assisted wor
 
 ---
 
-_Generated by Engram — continuity layer for AI-assisted workflows._
+_Generated by Engram â€” continuity layer for AI-assisted workflows._
 `;
 }
 
@@ -874,7 +1076,7 @@ async function buildMigrationPackage(sr, hd, userFiles) {
     packageType: "engram-migration-package",
     version: 1,
     generatedAt: new Date().toISOString(),
-    sourcePlatform: sr.platform || "claude",
+    sourcePlatform: getPlatformId(sr),
     sourceTitle: sr.sourceTitle || null,
     sourceUrl: sr.url || "unknown",
     chatHealth: hd?.score ?? null,
@@ -903,7 +1105,7 @@ async function buildMigrationPackage(sr, hd, userFiles) {
   };
 }
 
-// ── Debug hook (no-op in production — toggle ENGRAM_VERBOSE_LOGS in parser.js) ──
+// â”€â”€ Debug hook (no-op in production â€” toggle ENGRAM_VERBOSE_LOGS in parser.js) â”€â”€
 window.__ENGRAM_DEBUG__ = {
   computeHealthFromScan,
   generateHandoffMarkdown,
@@ -937,27 +1139,12 @@ async function loadState() {
   const tabId = tabs[0].id;
   const url = tabs[0].url || "";
 
-  // Determine platform
-  let platform = "other";
-  if (url.includes("claude.ai")) platform = "claude";
-  else if (url.includes("gemini.google.com")) platform = "gemini";
+  const platform = detectPlatformFromUrl(url);
+  console.log("[Engram] active tab detected", { tabId, url, platform });
+  updatePlatformDisplay(platform);
 
-  // Update platform icon and name
-  const iconEl = $("platformIcon");
-  const nameEl = $("platformName");
-
-  if (platform === "claude") {
-    nameEl.textContent = "CLAUDE";
-    nameEl.style.color = "#fc5000";
-    iconEl.style.color = "#fc5000";
-  } else if (platform === "gemini") {
-    nameEl.textContent = "GEMINI";
-    nameEl.style.color = "#524ae9";
-    iconEl.style.color = "#524ae9";
-  } else {
-    nameEl.textContent = "—";
-    nameEl.style.color = "#888";
-    iconEl.style.color = "#888";
+  if (platform !== "other" && !isScanning && !hasLocalScanResult) {
+    renderIdle("Scan to analyze this chat", false);
   }
 
   // Get data from worker
@@ -974,21 +1161,25 @@ async function loadState() {
         return;
       }
 
-      renderError("State unavailable. Scan Chat is still available.");
+      if (platform === "other") {
+        renderIdle("Open Claude or ChatGPT to scan a chat", true);
+      } else {
+        renderIdle("Scan to analyze this chat", false);
+      }
       return;
     }
 
     const session = res.session;
     const health = res.health;
 
-    // Update chat title — prefer scanned sourceTitle, fall back to session name
+    // Update chat title â€” prefer scanned sourceTitle, fall back to session name
     updateChatTitleEl(scanResults?.sourceTitle || session?.name || null);
 
     // Determine view state
     if (platform === "other") {
       // Not on AI platform
       if (keepLocalScanResult()) return;
-      renderIdle("Open Claude to scan this chat", true);
+      renderIdle("Open Claude or ChatGPT to scan a chat", true);
     } else if (scanResults && scanResults.chatId === session?.id) {
       // Already scanned this chat
       renderDone("state-match");
@@ -1007,7 +1198,7 @@ async function loadState() {
 }
 
 // Scan button
-$("btnScan").addEventListener("click", async () => {
+on("btnScan", "click", async () => {
   console.log("[Engram] scan button clicked");
   console.log("[Engram] scan started");
   isScanning = true;
@@ -1030,7 +1221,7 @@ $("btnScan").addEventListener("click", async () => {
       if (!response) {
         isScanning = false;
         $("btnScan").disabled = false;
-        renderError("Scan did not receive a response. Reload Claude and try again.");
+        renderError("Scan did not receive a response. Reload the page and try again.");
         return;
       }
 
@@ -1050,14 +1241,14 @@ $("btnScan").addEventListener("click", async () => {
     isScanning = false;
     hasLocalScanResult = false;
     $("btnScan").disabled = false;
-    renderError("Error starting scan. Reload Claude and try again.");
+    renderError("Error starting scan. Reload the page and try again.");
   }
 });
 
 // Listen for scan progress
 _api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "ENGRAM_SCAN_PROGRESS") {
-    $("scanCount").textContent = `⟳ Scanning... ${msg.count} messages found`;
+    $("scanCount").textContent = `âŸ³ Scanning... ${msg.count} messages found`;
     $("scanProgress").style.width = msg.percent + "%";
   }
 
@@ -1076,7 +1267,7 @@ _api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // Generate Handoff
-$("btnHandoff").addEventListener("click", async () => {
+on("btnHandoff", "click", async () => {
   const statusBar = $("statusBar");
   statusBar.textContent = "Generating handoff...";
   statusBar.style.color = "";
@@ -1090,10 +1281,10 @@ $("btnHandoff").addEventListener("click", async () => {
     const markdown = generateHandoffMarkdown(scanResults, lastHealthData);
     try {
       await navigator.clipboard.writeText(markdown);
-      statusBar.textContent = "✓ Handoff copied to clipboard!";
+      statusBar.textContent = "âœ“ Handoff copied to clipboard!";
       statusBar.style.color = "#22c55e";
     } catch (e) {
-      // Clipboard blocked — fall back to download
+      // Clipboard blocked â€” fall back to download
       const blob = new Blob([markdown], { type: "text/markdown" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1101,14 +1292,14 @@ $("btnHandoff").addEventListener("click", async () => {
       a.download = `engram-handoff-${Date.now()}.md`;
       a.click();
       URL.revokeObjectURL(url);
-      statusBar.textContent = "✓ Handoff downloaded (clipboard blocked)";
+      statusBar.textContent = "âœ“ Handoff downloaded (clipboard blocked)";
       statusBar.style.color = "#22c55e";
     }
     clearStatusBarLater(statusBar.textContent, 4000);
     return;
   }
 
-  // No local scan — try worker fallback
+  // No local scan â€” try worker fallback
   console.log("[Engram] no local scan results, trying worker handoff");
   const res = await runtimeSendMessage({ type: "ENGRAM_GENERATE_HANDOFF" });
   if (!res) {
@@ -1122,23 +1313,23 @@ $("btnHandoff").addEventListener("click", async () => {
   }
   const prompt = res.continuationPrompt || res.handoff?.continuationPrompt;
   if (!prompt) {
-    statusBar.textContent = "No handoff data — scan first";
+    statusBar.textContent = "No handoff data â€” scan first";
     clearStatusBarLater(statusBar.textContent, 3000);
     return;
   }
   try {
     await navigator.clipboard.writeText(prompt);
-    statusBar.textContent = "✓ Handoff copied to clipboard!";
+    statusBar.textContent = "âœ“ Handoff copied to clipboard!";
     statusBar.style.color = "#22c55e";
     clearStatusBarLater(statusBar.textContent, 3000);
   } catch (e) {
-    statusBar.textContent = "Clipboard blocked — see console";
+    statusBar.textContent = "Clipboard blocked â€” see console";
     statusBar.style.color = "#ef4444";
   }
 });
 
 // Export Migration Package (immediate, no file picker)
-$("btnExportPackage").addEventListener("click", async () => {
+on("btnExportPackage", "click", async () => {
   const statusBar = $("statusBar");
 
   if (!scanResults) {
@@ -1159,7 +1350,7 @@ $("btnExportPackage").addEventListener("click", async () => {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    statusBar.textContent = "✓ Migration package downloaded";
+    statusBar.textContent = "âœ“ Migration package downloaded";
     statusBar.style.color = "#22c55e";
     clearStatusBarLater(statusBar.textContent, 4000);
   } catch (e) {
@@ -1170,7 +1361,7 @@ $("btnExportPackage").addEventListener("click", async () => {
 });
 
 // Export Migration Package with Files (file picker first)
-$("btnExportWithFiles").addEventListener("click", async () => {
+on("btnExportWithFiles", "click", async () => {
   const statusBar = $("statusBar");
 
   if (!scanResults) {
@@ -1200,7 +1391,7 @@ $("btnExportWithFiles").addEventListener("click", async () => {
   });
 
   if (userFiles.length === 0) {
-    statusBar.textContent = "No files selected — exporting package without attachments";
+    statusBar.textContent = "No files selected â€” exporting package without attachments";
     statusBar.style.color = "";
   } else {
     statusBar.textContent = "Building migration package...";
@@ -1215,7 +1406,7 @@ $("btnExportWithFiles").addEventListener("click", async () => {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    statusBar.textContent = "✓ Migration package downloaded";
+    statusBar.textContent = "âœ“ Migration package downloaded";
     statusBar.style.color = "#22c55e";
     clearStatusBarLater(statusBar.textContent, 4000);
   } catch (e) {
@@ -1226,22 +1417,26 @@ $("btnExportWithFiles").addEventListener("click", async () => {
 });
 
 // Settings
-$("btnSettings").addEventListener("click", () => {
-  if (currentState === "settings") return;
+on("btnSettings", "click", () => {
+  if (currentState === "settings") {
+    const target = getMainPopupState();
+    stateBeforeSettings = null;
+    showState(target);
+    if (target !== "scanning") loadState();
+    return;
+  }
+
   stateBeforeSettings = currentState;
   showState("settings");
   loadSettings();
 });
 
-$("btnBack").addEventListener("click", () => {
-  // Never return to settings — compute a safe fallback if stateBeforeSettings is missing or corrupted
-  const target = (stateBeforeSettings && stateBeforeSettings !== "settings")
-    ? stateBeforeSettings
-    : (scanResults ? "done" : isScanning ? "scanning" : "idle");
-  showState(target);
-});
+// Website links
+on("btnOpenWebsiteBrand", "click", openEngramSite);
+on("btnOpenWebsiteMain", "click", openEngramSite);
+on("btnOpenWebsiteSettings", "click", openEngramSite);
 
-$("btnClearSettings").addEventListener("click", () => {
+on("btnClearSettings", "click", () => {
   if (!confirm("Clear all captured data?")) return;
   scanResults = null;
   hasLocalScanResult = false;
@@ -1250,8 +1445,8 @@ $("btnClearSettings").addEventListener("click", () => {
   runtimeSendMessage({ type: "ENGRAM_RESET_ALL" }).then(() => showState("idle"));
 });
 
-// Widget toggle — saves immediately on click
-$("btnWidgetToggle").addEventListener("click", async () => {
+// Widget toggle â€” saves immediately on click
+on("btnWidgetToggle", "click", async () => {
   engramSettings.showMiniHealthWidget = !engramSettings.showMiniHealthWidget;
   const btn = $("btnWidgetToggle");
   if (btn) {
@@ -1263,7 +1458,7 @@ $("btnWidgetToggle").addEventListener("click", async () => {
 });
 
 // Export Chat
-$("btnExport").addEventListener("click", () => {
+on("btnExport", "click", () => {
   if (!scanResults) return;
 
   const text = scanResults.messages
@@ -1279,13 +1474,13 @@ $("btnExport").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 
   const statusBar = $("statusBar");
-  statusBar.textContent = "✓ Chat exported";
+  statusBar.textContent = "âœ“ Chat exported";
   statusBar.style.color = "#22c55e";
   clearStatusBarLater(statusBar.textContent, 3000, true);
 });
 
 // Clear
-$("btnClear").addEventListener("click", () => {
+on("btnClear", "click", () => {
   if (!confirm("Clear current chat data?")) return;
 
   scanResults = null;
@@ -1295,7 +1490,7 @@ $("btnClear").addEventListener("click", () => {
 });
 
 // Mode toggle
-$("btnModeDemo").addEventListener("click", () => {
+on("btnModeDemo", "click", () => {
   engramSettings.mode = "demo";
   updateModeToggle("demo");
   $("panelDemo").style.display   = "block";
@@ -1303,7 +1498,7 @@ $("btnModeDemo").addEventListener("click", () => {
   updateDemoStatus();
 });
 
-$("btnModeCustom").addEventListener("click", () => {
+on("btnModeCustom", "click", () => {
   engramSettings.mode = "custom";
   updateModeToggle("custom");
   $("panelDemo").style.display   = "none";
@@ -1312,7 +1507,7 @@ $("btnModeCustom").addEventListener("click", () => {
 });
 
 // Save settings
-$("btnSaveSettings").addEventListener("click", saveSettings);
+on("btnSaveSettings", "click", saveSettings);
 
 // Init
 renderIdle();

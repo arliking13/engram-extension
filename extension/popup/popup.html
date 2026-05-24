@@ -11,10 +11,15 @@
 
     <!-- Header -->
     <div class="header">
-      <span class="logo">⬡ Engram</span>
+      <button class="logo" id="btnOpenWebsiteBrand"
+              aria-label="Open Engram website" title="Open Engram website">
+        <img class="logo-icon" src="../assets/engram-icon.png" alt="" aria-hidden="true" />
+        <span>Engram</span>
+      </button>
       <div class="header-right">
         <span class="version">v0.1</span>
-        <button class="btn-icon" id="btnSettings" title="Settings">⚙</button>
+        <button class="btn-icon" id="btnSettings"
+              aria-label="Open settings" aria-pressed="false" title="Settings">⚙</button>
       </div>
     </div>
 
@@ -130,7 +135,8 @@
       <!-- Generate Handoff -->
       <button class="btn btn-primary" id="btnHandoff"
               title="Generate a handoff package to continue in a new chat">
-        ⬡ Generate Handoff
+        <img class="btn-handoff-icon" src="../assets/engram-icon.png" alt="" aria-hidden="true">
+        Generate Handoff
       </button>
 
       <!-- Migration Package Card -->
@@ -167,7 +173,6 @@
     <div id="settingsView" style="display: none;" class="view">
 
       <div class="settings-header">
-        <button class="btn-back" id="btnBack">← Back</button>
         <span class="settings-title">Settings</span>
       </div>
 
@@ -270,6 +275,18 @@
       </div>
 
       <div class="settings-section">
+        <div class="settings-section-label">About Engram</div>
+        <div class="settings-note">
+          Learn what Engram does, how migration packages work, and how to use it during long AI workflows.
+        </div>
+        <div class="settings-action-row">
+          <button class="btn btn-ghost btn-block btn-sm" id="btnOpenWebsiteSettings">
+            Open Engram Website
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-label">Data</div>
         <div class="settings-danger-row">
           <button class="btn btn-danger btn-block" id="btnClearSettings">
@@ -278,6 +295,10 @@
         </div>
       </div>
 
+    </div>
+
+    <div class="popup-site-link">
+      <button id="btnOpenWebsiteMain" class="site-link">Learn how Engram works</button>
     </div>
 
   </div>

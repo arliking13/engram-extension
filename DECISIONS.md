@@ -59,6 +59,12 @@ Saved jobs go into `browser.storage.local` under key `engramSavedJobs` (array). 
 
 Rationale: Keeps job storage simple and separate from chat session storage. IndexedDB schema does not need versioning or migration for the skeleton.
 
+### Public landing page is a separate static site
+
+The public Engram marketing/landing page lives under `site/` as a no-dependency static package with a small Node build script that publishes `site/dist`.
+
+Rationale: Keeps extension functionality isolated from website work, avoids frontend dependency churn during MVP development, and makes the page simple to deploy on Vercel.
+
 ## Candidate Or Historical Decisions To Revisit Later
 
 - Gemini parser and Gemini API integration are not current MVP priorities unless needed for demo requirements.

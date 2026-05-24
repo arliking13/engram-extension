@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Engram is an AI chat continuity browser extension for context health, handoff prompts, and migration packages.">
+    <title>Engram - AI Chat Continuity Extension</title>
+    <link rel="icon" type="image/png" href="/assets/engram-icon.png">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="site-header" aria-label="Primary navigation">
+      <a class="brand" href="#top" aria-label="Engram home">
+        <span class="brand-mark">
+          <img class="brand-logo-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true">
+        </span>
+        <span class="brand-name">Engram</span>
+      </a>
+      <nav class="nav-links" aria-label="Page sections">
+        <a href="#problem">Problem</a>
+        <a href="#job-workflow">Hackathon</a>
+        <a href="#features">Features</a>
+        <a href="#privacy">Privacy</a>
+      </nav>
+      <div class="header-links">
+        <a class="creator-nav-link" href="https://www.linkedin.com/in/temirlan-rashid" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+        <a class="creator-nav-link" href="https://devpost.com/temirlanrashid" target="_blank" rel="noopener noreferrer">Devpost</a>
+        <a class="button button-ghost" href="https://github.com/arliking13/engram-extension" target="_blank" rel="noopener noreferrer" aria-label="View Engram on GitHub">GitHub</a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-scene" aria-hidden="true">
+          <div class="scene-grid"></div>
+          <div class="scene-orbit scene-orbit-a"></div>
+          <div class="scene-orbit scene-orbit-b"></div>
+
+          <div class="product-console popup-preview" data-tilt>
+            <div class="popup-preview-header">
+              <span class="popup-logo">
+                <img class="mock-logo-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true">
+                <span>Engram</span>
+              </span>
+              <span class="popup-version">v0.1</span>
+              <span class="popup-gear">&#9881;</span>
+            </div>
+
+            <div class="popup-platform">
+              <span class="platform-star">&#9733;</span>
+              <span>Claude.ai</span>
+              <strong>Senior Remote PM Search</strong>
+            </div>
+
+            <div class="popup-gauge-card">
+              <div class="popup-gauge-wrap">
+                <svg class="popup-gauge-svg" viewBox="0 0 200 110" aria-hidden="true">
+                  <defs>
+                    <linearGradient id="siteGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" style="stop-color:#ef4444"></stop>
+                      <stop offset="25%" style="stop-color:#f97316"></stop>
+                      <stop offset="50%" style="stop-color:#f59e0b"></stop>
+                      <stop offset="75%" style="stop-color:#84cc16"></stop>
+                      <stop offset="100%" style="stop-color:#22c55e"></stop>
+                    </linearGradient>
+                  </defs>
+                  <path d="M 15 100 A 85 85 0 0 1 185 100" fill="none" stroke="#1e1e1e" stroke-width="18" stroke-linecap="round"></path>
+                  <path d="M 15 100 A 85 85 0 0 1 185 100" fill="none" stroke="url(#siteGaugeGrad)" stroke-width="18" stroke-linecap="round" opacity="0.9"></path>
+                  <g class="mock-needle">
+                    <line x1="100" y1="100" x2="100" y2="24" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"></line>
+                    <line x1="100" y1="100" x2="100" y2="108" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"></line>
+                  </g>
+                  <circle cx="100" cy="100" r="6" fill="#1a1a1a" stroke="#333" stroke-width="1"></circle>
+                  <circle cx="100" cy="100" r="3.5" fill="#a881fe"></circle>
+                </svg>
+                <span class="glabel glabel-crit">CRIT</span>
+                <span class="glabel glabel-low">LOW</span>
+                <span class="glabel glabel-fair">FAIR</span>
+                <span class="glabel glabel-good">GOOD</span>
+                <span class="glabel glabel-safe">SAFE</span>
+              </div>
+              <strong class="popup-status">Risky</strong>
+              <span class="popup-hint">Generate handoff soon</span>
+            </div>
+
+            <div class="popup-health-panel">
+              <div><span>Migration Risk</span><strong>Critical</strong></div>
+              <div><span>Browser Load</span><strong>Very Heavy</strong></div>
+              <ul>
+                <li>Long chat history detected</li>
+                <li>Code-heavy session</li>
+              </ul>
+              <p>Export a handoff package before continuing.</p>
+            </div>
+
+            <div class="popup-stats" aria-hidden="true">
+              <div><strong>169</strong><span>YOU</span></div>
+              <div><strong>195</strong><span>AI</span></div>
+              <div><strong>364</strong><span>TOTAL</span></div>
+              <div><strong>170</strong><span>CODE</span></div>
+            </div>
+
+            <button class="popup-primary" type="button" tabindex="-1">&#11041; Generate Handoff</button>
+
+            <div class="popup-package-card">
+              <strong>Migration Package</strong>
+              <span>ZIP with handoff, full chat, signals, and optional files.</span>
+              <div>
+                <button type="button" tabindex="-1">Download ZIP</button>
+                <button type="button" tabindex="-1">ZIP + Add Files</button>
+              </div>
+            </div>
+
+            <div class="popup-secondary-actions">
+              <button type="button" tabindex="-1">Export Chat</button>
+              <button type="button" tabindex="-1">Clear</button>
+            </div>
+          </div>
+
+          <div class="mini-chip">&#11041; Engram &middot; Safe &middot; 4 msgs</div>
+        </div>
+
+        <div class="hero-content">
+          <img class="hero-brand-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true">
+          <p class="badge">Hackathon MVP: AI-powered remote job workflow continuity</p>
+          <p class="eyebrow">AI chat continuity extension</p>
+          <h1 id="hero-title">Engram</h1>
+          <p class="hero-line">Keep the thread. Never lose context.</p>
+          <p class="hero-copy">
+            Engram keeps long AI workflows alive - starting with remote job search. Monitor context health, generate handoffs, and export migration packages when your chat gets too heavy.
+          </p>
+          <div class="hero-actions" aria-label="Primary actions">
+            <a class="button button-primary" href="https://github.com/arliking13/engram-extension" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+            <a class="button button-secondary" href="#install">Local install guide</a>
+          </div>
+          <div class="support-note">
+            <span>Claude.ai MVP</span>
+            <span>Local-first</span>
+            <span>ZIP handoff</span>
+          </div>
+          <div class="creator-links" aria-label="Creator links">
+            <span>Built by Temirlan Rashid</span>
+            <a href="https://www.linkedin.com/in/temirlan-rashid" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+            <a href="https://devpost.com/temirlanrashid" target="_blank" rel="noopener noreferrer">Devpost</a>
+            <a href="https://github.com/arliking13" target="_blank" rel="noopener noreferrer">GitHub</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section problem-section" id="problem" aria-labelledby="problem-title">
+        <div class="section-heading">
+          <p class="eyebrow">The break point</p>
+          <h2 id="problem-title">Long AI chats break momentum.</h2>
+          <p>Useful work piles up inside one fragile session. By the time the chat slows down, the hard part is no longer asking the AI - it is carrying the context forward.</p>
+        </div>
+        <div class="pain-grid">
+          <article class="card pain-card">
+            <span>01</span>
+            <h3>Context gets buried</h3>
+            <p>Decisions, constraints, and project state sink under hundreds of messages.</p>
+          </article>
+          <article class="card pain-card">
+            <span>02</span>
+            <h3>Browser sessions slow down</h3>
+            <p>Heavy pages make continuing the same workflow feel risky and brittle.</p>
+          </article>
+          <article class="card pain-card">
+            <span>03</span>
+            <h3>Files and code blocks scatter</h3>
+            <p>Important snippets and attachments drift away from the reasoning that produced them.</p>
+          </article>
+          <article class="card pain-card">
+            <span>04</span>
+            <h3>Fresh chats are painful</h3>
+            <p>Starting over means rebuilding memory by hand, usually under pressure.</p>
+          </article>
+        </div>
+        <div class="solution-strip">
+          <strong>Engram turns that messy session into a clean continuation package.</strong>
+          <span>Scan the chat, review health, generate the handoff, export the package, and continue with less friction.</span>
+        </div>
+      </section>
+
+      <section class="section job-section" id="job-workflow" aria-labelledby="job-title">
+        <div class="section-heading split">
+          <div>
+            <p class="eyebrow">Hackathon demo use case</p>
+            <h2 id="job-title">Built for AI-powered job search workflows.</h2>
+          </div>
+          <p>Use AI to compare remote roles, preserve application decisions, carry resume and job notes forward, and continue in a fresh chat when the session gets heavy. This is the demo lens, not the product ceiling.</p>
+        </div>
+        <div class="use-case-grid">
+          <article class="card use-card">
+            <span class="icon-dot violet"></span>
+            <h3>Analyze remote roles</h3>
+            <p>Compare job posts, requirements, responsibilities, and fit inside an AI chat.</p>
+          </article>
+          <article class="card use-card">
+            <span class="icon-dot violet"></span>
+            <h3>Preserve application context</h3>
+            <p>Keep role details, notes, prompts, decisions, and reasoning across long sessions.</p>
+          </article>
+          <article class="card use-card">
+            <span class="icon-dot violet"></span>
+            <h3>Move to a fresh chat</h3>
+            <p>When the session gets heavy, export a handoff package and continue cleanly.</p>
+          </article>
+          <article class="card use-card">
+            <span class="icon-dot violet"></span>
+            <h3>Keep files together</h3>
+            <p>Carry resumes, notes, PDFs, or job materials with the migration package.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section feature-section" id="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">Product features</p>
+          <h2 id="features-title">Continuity tools for chats that outgrow themselves.</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="card feature-card">
+            <span class="icon-dot violet"></span>
+            <h3>Chat Health Meter</h3>
+            <p>See context risk, browser load, message count, and code density before the chat becomes painful.</p>
+          </article>
+          <article class="card feature-card">
+            <span class="icon-dot blue"></span>
+            <h3>Handoff Generator</h3>
+            <p>Create a continuation prompt that tells the next AI exactly where to resume.</p>
+          </article>
+          <article class="card feature-card">
+            <span class="icon-dot violet"></span>
+            <h3>Migration Package ZIP</h3>
+            <p>Export handoff notes, full chat, technical signals, manifest, and selected files together.</p>
+          </article>
+          <article class="card feature-card">
+            <span class="icon-dot blue"></span>
+            <h3>Mini Health Widget</h3>
+            <p>Keep a small draggable status chip visible while working inside Claude.</p>
+          </article>
+          <article class="card feature-card wide">
+            <span class="icon-dot violet"></span>
+            <h3>Local-first privacy</h3>
+            <p>Core MVP features run locally. Files are user-selected. No backend required.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section workflow-section" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading compact">
+          <p class="eyebrow">How it works</p>
+          <h2 id="workflow-title">From overloaded thread to clean continuation.</h2>
+        </div>
+        <ol class="workflow">
+          <li>
+            <span>01</span>
+            <strong>Scan the chat</strong>
+            <p>Capture visible messages, code blocks, metadata, and title context.</p>
+          </li>
+          <li>
+            <span>02</span>
+            <strong>Review health</strong>
+            <p>Check risk, load, message volume, and handoff readiness.</p>
+          </li>
+          <li>
+            <span>03</span>
+            <strong>Generate handoff</strong>
+            <p>Create a concise continuation prompt for the next AI session.</p>
+          </li>
+          <li>
+            <span>04</span>
+            <strong>Export package</strong>
+            <p>Bundle notes, chat data, technical signals, and selected files.</p>
+          </li>
+          <li>
+            <span>05</span>
+            <strong>Continue in a fresh chat</strong>
+            <p>Paste the handoff and resume without reconstructing the whole thread.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="section demo-flow-section" aria-labelledby="demo-flow-title">
+        <div class="section-heading compact">
+          <p class="eyebrow">Demo workflow</p>
+          <h2 id="demo-flow-title">Remote job analysis without losing the thread.</h2>
+        </div>
+        <div class="demo-flow">
+          <span>LinkedIn job page</span>
+          <span>Copy AI Prompt</span>
+          <span>Analyze in Claude/GPT</span>
+          <span>Engram preserves the AI session</span>
+          <span>Export handoff/package</span>
+          <span>Continue in fresh chat</span>
+        </div>
+      </section>
+
+      <section class="section preview-section" aria-labelledby="preview-title">
+        <div class="section-heading">
+          <p class="eyebrow">Product preview</p>
+          <h2 id="preview-title">A compact extension UI for high-context work.</h2>
+        </div>
+        <div class="preview-grid">
+          <article class="preview-card card large">
+            <div class="mock-popup-real">
+              <div class="popup-preview-header compact">
+                <span class="popup-logo">
+                  <img class="mock-logo-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true">
+                  <span>Engram</span>
+                </span>
+                <span class="popup-version">v0.1</span>
+                <span class="popup-gear">&#9881;</span>
+              </div>
+              <div class="popup-platform compact">
+                <span class="platform-star">&#9733;</span>
+                <span>Claude.ai</span>
+                <strong>Remote role analysis</strong>
+              </div>
+              <div class="popup-gauge-card compact">
+                <div class="popup-gauge-wrap small">
+                  <svg class="popup-gauge-svg" viewBox="0 0 200 110" aria-hidden="true">
+                    <path d="M 15 100 A 85 85 0 0 1 185 100" fill="none" stroke="#1e1e1e" stroke-width="18" stroke-linecap="round"></path>
+                    <path d="M 15 100 A 85 85 0 0 1 185 100" fill="none" stroke="url(#siteGaugeGrad)" stroke-width="18" stroke-linecap="round" opacity="0.9"></path>
+                    <g class="mock-needle">
+                      <line x1="100" y1="100" x2="100" y2="24" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"></line>
+                      <line x1="100" y1="100" x2="100" y2="108" stroke="#d4d4d4" stroke-width="2.5" stroke-linecap="round"></line>
+                    </g>
+                    <circle cx="100" cy="100" r="6" fill="#1a1a1a" stroke="#333" stroke-width="1"></circle>
+                    <circle cx="100" cy="100" r="3.5" fill="#a881fe"></circle>
+                  </svg>
+                  <span class="glabel glabel-crit">CRIT</span>
+                  <span class="glabel glabel-low">LOW</span>
+                  <span class="glabel glabel-fair">FAIR</span>
+                  <span class="glabel glabel-good">GOOD</span>
+                  <span class="glabel glabel-safe">SAFE</span>
+                </div>
+                <strong class="popup-status">Risky</strong>
+              </div>
+              <div class="popup-stats">
+                <div><strong>169</strong><span>YOU</span></div>
+                <div><strong>195</strong><span>AI</span></div>
+                <div><strong>364</strong><span>TOTAL</span></div>
+                <div><strong>170</strong><span>CODE</span></div>
+              </div>
+              <button class="popup-primary" type="button" tabindex="-1">&#11041; Generate Handoff</button>
+            </div>
+            <div>
+              <h3>Popup health dashboard</h3>
+              <p>Context health, risk, load, counts, and the primary handoff action in one compact view.</p>
+            </div>
+          </article>
+          <article class="preview-card card">
+            <div class="mock-package real-package">
+              <strong>Migration Package</strong>
+              <p>ZIP with handoff, full chat, signals, and optional files.</p>
+              <div>
+                <button type="button" tabindex="-1">Download ZIP</button>
+                <button type="button" tabindex="-1">ZIP + Add Files</button>
+              </div>
+            </div>
+            <h3>Migration package export</h3>
+          </article>
+          <article class="preview-card card">
+            <div class="mini-widget-preview">
+              <div class="ew-row-compact">
+                <span class="ew-logo">&#11041; Engram</span>
+                <span class="ew-dot">&middot;</span>
+                <span class="ew-badge">Safe</span>
+                <span class="ew-dot">&middot;</span>
+                <span class="ew-muted">4 msgs</span>
+              </div>
+              <div class="ew-expanded">
+                <div><span>Status</span><strong>Safe</strong></div>
+                <div><span>Risk</span><strong>Low</strong></div>
+                <div><span>Load</span><strong>Smooth</strong></div>
+                <div><span>Accuracy</span><strong>Full scan</strong></div>
+              </div>
+            </div>
+            <h3>Mini health widget</h3>
+          </article>
+          <article class="preview-card card">
+            <div class="linkedin-widget-preview">
+              <div class="job-widget-head">
+                <strong>&#11041; Engram</strong>
+                <span>&times;</span>
+              </div>
+              <p>LinkedIn job page detected</p>
+              <button type="button" tabindex="-1">Save Job</button>
+              <button type="button" tabindex="-1">Copy AI Prompt</button>
+              <small>Prompt bridge for AI analysis</small>
+            </div>
+            <h3>LinkedIn prompt bridge</h3>
+          </article>
+        </div>
+      </section>
+
+      <section class="section privacy-section" id="privacy" aria-labelledby="privacy-title">
+        <div class="privacy-card card">
+          <div>
+            <p class="eyebrow">Privacy model</p>
+            <h2 id="privacy-title">Local-first by default.</h2>
+          </div>
+          <div>
+            <p>Engram does not need a backend for its core MVP workflow. Chat scans, handoffs, ZIP packages, and user-selected files are handled locally in the browser.</p>
+            <p>For broader product use, backend-assisted AI features can be added later, but the MVP continuity flow is local-first.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section platform-section" aria-labelledby="platform-title">
+        <div class="platform-card card">
+          <div>
+            <p class="eyebrow">Platform support</p>
+            <h2 id="platform-title">MVP support: Claude.ai</h2>
+          </div>
+          <p>More AI platforms can be added through platform parsers. The architecture is built around capture, health, and handoff, not a single chat provider.</p>
+        </div>
+      </section>
+
+      <section class="section cta-section" id="install" aria-labelledby="install-title">
+        <div class="cta-panel">
+          <div>
+            <p class="eyebrow">Try the MVP</p>
+            <h2 id="install-title">Try Engram locally.</h2>
+            <p>Clone the repo, load the extension folder in Firefox, and test the Claude.ai continuity workflow.</p>
+            <div class="built-by">
+              <span>Built by Temirlan Rashid</span>
+              <a href="https://www.linkedin.com/in/temirlan-rashid" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+              <a href="https://devpost.com/temirlanrashid" target="_blank" rel="noopener noreferrer">Devpost</a>
+              <a href="https://github.com/arliking13" target="_blank" rel="noopener noreferrer">GitHub</a>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/arliking13/engram-extension" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+            <a class="button button-secondary" href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Your_first_WebExtension#installing" target="_blank" rel="noopener noreferrer">Local install guide</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <img class="footer-logo-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true">
+        <div>
+        <strong>Engram</strong>
+        <span>Keep the thread. Never lose context.</span>
+        </div>
+      </div>
+      <nav class="footer-links" aria-label="Project links">
+        <a href="https://github.com/arliking13" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://www.linkedin.com/in/temirlan-rashid" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+        <a href="https://devpost.com/temirlanrashid" target="_blank" rel="noopener noreferrer">Devpost</a>
+      </nav>
+    </footer>
+
+    <script src="./main.js" defer></script>
+  </body>
+</html>

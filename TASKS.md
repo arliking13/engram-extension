@@ -61,9 +61,29 @@ Ship a demoable Engram extension flow:
 - [x] Update Mini Health Widget expanded copy to show exact/full-scan vs live-estimate accuracy clearly.
 - [x] Unify Mini Health Widget estimated status names with popup vocabulary: `Safe/Good/Fair/Risky/Critical`.
 - [x] Move estimated/full-scan distinction into secondary `Accuracy` metadata and compact `est.` badge.
+- [x] Apply uploaded `DESIGN.md` visual direction to popup styling: midnight surfaces, translucent cards, violet primary CTA, blue package actions, subtle borders, 16px cards, 12px buttons.
+- [x] Restyle Mini Health Widget to match the popup visual system without changing drag/status behavior.
+- [x] Compact Health Meter/gauge card to reclaim vertical popup space while preserving scoring and needle behavior.
+- [x] Create static Vercel-ready public landing page under `site/` using the DESIGN.md visual direction.
+- [x] Add lightweight landing page motion polish with scroll reveals, restrained hover states, product glow, and reduced-motion support.
+- [x] Add official Engram logo assets to landing page and popup header without changing extension behavior.
+- [x] Add popup platform metadata helpers for ChatGPT/Claude/Gemini generated outputs.
+- [x] Add ChatGPT popup platform display branch with OpenAI green status.
+- [x] Restore cap-based health calibration v5 for dense ChatGPT/code-heavy chats.
+- [x] Add ChatGPT parser dense-message metadata for `veryLargeMessageCount`, `hugeMessageCount`, and transcript likelihood.
+- [x] Fix shared popup blank-state regression caused by missing Settings Back button listener target.
+- [x] Add shared popup URL platform detection for Claude and ChatGPT active tabs.
+- [x] Ensure supported Claude/ChatGPT tabs show Scan Chat even when worker state is null/unavailable.
+- [x] Make Settings gear toggle main/settings views and remove the Back button from the current popup UI.
+- [x] Add active/pressed Settings gear state while Settings is open.
+- [x] Wire popup website CTAs to `https://engram-blush-tau.vercel.app/`.
 
 ## In Progress
 
+- [ ] Live Firefox validation that Settings gear toggles main -> settings -> main on Claude and ChatGPT.
+- [ ] Live Firefox validation that popup platform row and Scan Chat body render on both Claude and ChatGPT after reload.
+- [ ] Live Firefox validation of ChatGPT end-to-end support: platform label, Scan Chat, Generate Handoff, migration package, export, and health behavior.
+- [ ] Live Firefox validation of ChatGPT tiny/Forrest/Subway health calibration against real DOM extraction.
 - [ ] Live Firefox extension validation after popup fallback and Claude parser DOM capture updates.
 - [ ] Live Firefox validation of Mini Health Widget: enable setting, drag chip, reload position, edge clamp, click toggle, Scan Chat, message counters, Generate Handoff, Download ZIP, ZIP + Add Files, Export Chat, Settings Back.
 - [ ] Live Firefox validation that Mini Health Widget health label, Migration Risk, Browser Load, and counts match the main popup after Scan Chat.
@@ -71,6 +91,12 @@ Ship a demoable Engram extension flow:
 - [ ] Live Firefox validation that switching back to a previously scanned Claude chat restores exact widget status from the snapshot map.
 - [ ] Live Firefox validation that unscanned visible chats show shared status names with `Accuracy: Estimated`, not generic `Live` or `Not scanned`.
 - [ ] Live Firefox validation that estimated and full-scan Mini Health Widget modes use the same status names and only `Accuracy` changes.
+- [ ] Live Firefox visual review after DESIGN.md styling pass: popup hierarchy, settings spacing, migration package grouping, and mini-widget compact/expanded appearance.
+- [ ] Live Firefox visual validation that compact Health Meter remains readable and bottom actions are easier to access.
+- [ ] Browser visual review of `site/` landing page across desktop and mobile widths.
+- [ ] Browser visual review that landing page motion feels subtle, premium, and respects reduced-motion preferences.
+- [ ] Browser/extension visual review that official logo appears crisp in landing page header/footer/hero and popup header.
+- [ ] Deploy `site/` landing page to Vercel after review.
 - [ ] Live Firefox validation of LinkedIn widget fix: open https://www.linkedin.com/jobs/search-results/?currentJobId=... — widget must appear even if it only shows "LinkedIn job page detected".
 - [ ] Confirm Copy AI Prompt copies 8-section structured prompt to clipboard.
 - [ ] Confirm Save Job stores data — check browser.storage.local in devtools for engramSavedJobs.

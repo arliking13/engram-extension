@@ -553,6 +553,11 @@
   const _wId   = ENGRAM_WIDGET_ID;
   const _wStId = ENGRAM_WIDGET_STYLE_ID;
   const _wStor = isFirefox ? browser.storage.local : chrome.storage.local;
+  const _wIconUrl = isFirefox
+    ? browser.runtime.getURL("assets/engram-icon.png")
+    : chrome.runtime.getURL("assets/engram-icon.png");
+  const _wLogoImg = "<img class='ew-icon' src='" + _wIconUrl + "' alt='' aria-hidden='true'" +
+    " onerror=\"this.outerHTML='<span class=ew-icon-fb></span>'\">";
 
   let _wEl        = null;
   let _wEnabled   = false;
@@ -731,7 +736,7 @@
     if (!st.hasData && _wCollapsed) {
       _wEl.innerHTML =
         "<div class='ew-row-compact'>" +
-          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
           "<span class='ew-dot'>&#xB7;</span>" +
           "<span class='ew-muted'>Waiting for chat</span>" +
         "</div>";
@@ -741,7 +746,7 @@
     if (!st.hasData) {
       _wEl.innerHTML =
         "<div class='ew-head'>" +
-          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
           "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
         "</div>" +
         "<div class='ew-body'>" +
@@ -754,7 +759,7 @@
     if (st.mode === "live" && _wCollapsed) {
       _wEl.innerHTML =
         "<div class='ew-row-compact' title='Estimated from visible chat data. Click to expand'>" +
-          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
           "<span class='ew-dot'>&#xB7;</span>" +
           "<span class='ew-badge' style='color:" + st.color + "'>" + st.label + "</span>" +
           "<span class='ew-dot'>&#xB7;</span>" +
@@ -768,7 +773,7 @@
     if (st.mode === "live") {
       _wEl.innerHTML =
         "<div class='ew-head'>" +
-          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
           "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
         "</div>" +
         "<div class='ew-body'>" +
@@ -788,7 +793,7 @@
     if (_wCollapsed) {
       _wEl.innerHTML =
         "<div class='ew-row-compact' title='Click to expand'>" +
-          "<span class='ew-logo'>&#x2B21; Engram</span>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
           "<span class='ew-dot'>&#xB7;</span>" +
           "<span class='ew-badge' style='color:" + st.color + "'>" + st.label + "</span>" +
           "<span class='ew-dot'>&#xB7;</span>" +
@@ -799,7 +804,7 @@
 
     _wEl.innerHTML =
       "<div class='ew-head'>" +
-        "<span class='ew-logo'>&#x2B21; Engram</span>" +
+        "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
         "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
       "</div>" +
       "<div class='ew-body'>" +
@@ -925,36 +930,38 @@
     style.id = _wStId;
     style.textContent =
       "#" + _wId + "{position:fixed;bottom:80px;right:16px;z-index:2147483647;" +
-      "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;" +
-      "background:rgba(13,13,13,0.92);border:1px solid #252525;border-radius:10px;" +
-      "color:#e5e5e5;box-shadow:0 4px 20px rgba(0,0,0,0.5);" +
-      "backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);" +
+      "font-family:'Satoshi-Variable',Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;" +
+      "background:rgba(11,11,11,0.92);border:1px solid rgba(245,245,245,0.12);border-radius:16px;" +
+      "color:#f5f5f5;box-shadow:rgba(3,3,3,0.12) 0 12px 30px -4px;" +
+      "backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);" +
       "box-sizing:border-box;width:max-content;max-width:260px;height:auto;resize:none;overflow:hidden;" +
       "user-select:none;touch-action:none;transition:opacity 0.2s;cursor:grab;}" +
       "#" + _wId + ":hover{opacity:1!important;}" +
       ".ew-row-compact{display:flex;align-items:center;gap:5px;padding:7px 11px;" +
-        "border-radius:10px;font-size:12px;white-space:nowrap;}" +
-      ".ew-row-compact:hover{background:rgba(255,255,255,0.04);}" +
-      ".ew-logo{color:#a78bfa;font-weight:700;font-size:11px;}" +
+        "border-radius:16px;font-size:12px;white-space:nowrap;}" +
+      ".ew-row-compact:hover{background:rgba(168,129,254,0.08);}" +
+      ".ew-logo{display:inline-flex;align-items:center;gap:4px;color:#a881fe;font-weight:750;font-size:11px;}" +
+      ".ew-icon{display:block;width:13px;height:13px;object-fit:contain;flex-shrink:0;}" +
+      ".ew-icon-fb{display:inline-block;width:10px;height:10px;background:rgba(168,129,254,0.8);border-radius:2px;flex-shrink:0;}" +
       ".ew-badge{font-weight:700;font-size:11px;}" +
-      ".ew-est{color:#777;font-size:10px;font-weight:600;}" +
-      ".ew-dot{color:#444;font-size:11px;}" +
-      ".ew-muted{color:#555;font-size:11px;}" +
-      ".ew-hint{color:#777;font-size:11px;line-height:1.4;}" +
+      ".ew-est{color:#aeaeae;font-size:10px;font-weight:650;}" +
+      ".ew-dot{color:#5f5f68;font-size:11px;}" +
+      ".ew-muted{color:#aeaeae;font-size:11px;}" +
+      ".ew-hint{color:#aeaeae;font-size:11px;line-height:1.4;}" +
       ".ew-hint-expanded{max-width:220px;}" +
-      ".ew-subtle{color:#777;font-size:11px;line-height:1.35;}" +
+      ".ew-subtle{color:#aeaeae;font-size:11px;line-height:1.35;}" +
       ".ew-head{display:flex;align-items:center;justify-content:space-between;" +
-        "padding:7px 10px 5px;border-bottom:1px solid #1e1e1e;}" +
-      ".ew-close{background:none;border:none;color:#555;cursor:pointer;" +
+        "padding:8px 10px 6px;border-bottom:1px solid rgba(245,245,245,0.10);}" +
+      ".ew-close{background:none;border:none;color:#aeaeae;cursor:pointer;" +
         "font-size:16px;padding:0 2px;line-height:1;font-family:inherit;transition:color 0.15s;}" +
-      ".ew-close:hover{color:#aaa;}" +
-      ".ew-body{padding:6px 10px 8px;display:flex;flex-direction:column;gap:3px;}" +
+      ".ew-close:hover{color:#f5f5f5;}" +
+      ".ew-body{padding:7px 10px 9px;display:flex;flex-direction:column;gap:4px;}" +
       ".ew-kv{display:flex;align-items:center;gap:4px;}" +
-      ".ew-k{color:#555;font-size:11px;min-width:64px;}" +
-      ".ew-v{font-weight:600;font-size:11px;color:#ccc;}" +
+      ".ew-k{color:#aeaeae;font-size:11px;min-width:64px;}" +
+      ".ew-v{font-weight:700;font-size:11px;color:#f5f5f5;}" +
       ".ew-ml{margin-left:8px;}" +
-      ".ew-hr{height:1px;background:#1e1e1e;margin:2px 0;}" +
-      ".ew-time{color:#444;font-size:10px;margin-top:2px;}";
+      ".ew-hr{height:1px;background:rgba(245,245,245,0.10);margin:2px 0;}" +
+      ".ew-time{color:#6f6f78;font-size:10px;margin-top:2px;}";
     document.head.appendChild(style);
 
     _wEl = document.createElement("div");

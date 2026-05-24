@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-23 by Codex.
+Last updated: 2026-05-24 by Codex.
 
 ## Snapshot
 
@@ -26,6 +26,16 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 - Popup also keeps a bounded `engramHealthSnapshotsByChatId` map of the latest 20 health snapshots so returning to a previously scanned chat can restore exact widget status.
 - Mini Health Widget now falls back to a clearly labeled `Live` estimate when the current chat has visible messages but no matching exact snapshot.
 - Mini Health Widget live fallback now uses the shared `Safe/Good/Fair/Risky/Critical` status vocabulary, with estimated accuracy shown separately.
+- Popup visual styling now follows the uploaded `DESIGN.md` direction: midnight background, translucent cards, violet primary actions, blue secondary package actions, subtle borders, and 16px card radius.
+- Popup Health Meter card is now more compact so the Migration Package and bottom actions are easier to reach.
+- Mini Health Widget styling now matches the popup visual system while preserving its compact draggable behavior.
+- Public Engram landing page now exists under `site/` as a separate static, Vercel-ready package.
+- Landing page now has lightweight premium motion: hero entrance, scroll reveals, restrained hover states, product glow, and reduced-motion support.
+- Official Engram transparent PNG logo assets are now available under `site/public/assets/` and `extension/assets/`, and are used in the landing page plus popup header.
+- ChatGPT parser support is present for `chatgpt.com` and `chat.openai.com`.
+- Popup platform metadata now resolves ChatGPT, Claude.ai, Gemini, or Unknown from scan metadata and source URL.
+- Popup ChatGPT display branch now shows `CHATGPT` in OpenAI green on ChatGPT pages.
+- Popup health scoring is restored to cap-based calibration v5 for dense ChatGPT/code-heavy payloads while keeping browser load separate from migration risk.
 
 ## Known Issues To Preserve
 
@@ -38,8 +48,132 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 - Mini Health Widget health snapshot matching still needs live verification that same-chat snapshots display and stale cross-chat snapshots show "Not scanned".
 - Mini Health Widget hybrid mode still needs live verification while switching among scanned and unscanned Claude chats.
 - Mini Health Widget status vocabulary still needs live verification that estimated mode and full-scan mode use the same status names with only `Accuracy` changing.
+- Visual refresh still needs live browser review for popup density, button grouping, settings readability, and mini-widget drag/position behavior.
+- Landing page still needs browser visual review across desktop/mobile and Vercel deployment after review.
+- ChatGPT support still needs live Firefox validation on tiny, dense, and code-heavy chats, plus Claude regression testing.
 
 ## Last Code Change
+
+- Wired popup website CTAs to the deployed Engram landing page.
+- Added `ENGRAM_SITE_URL = "https://engram-blush-tau.vercel.app/"` in `extension/popup/popup.js`.
+- Added a cross-browser `tabsCreate()` helper and shared `openEngramSite()` handler.
+- Bound the header Engram logo, main `Learn how Engram works` link, and Settings `Open Engram Website` CTA to the same deployed URL.
+- No site files, parsers, health scoring, handoff generation, ZIP writer logic, or migration package logic were changed.
+- No new durable product or architecture decision was made.
+
+## Previous Code Change
+
+- Fixed Settings navigation so the header gear is now a true toggle.
+- Root cause: the gear click handler returned immediately when `currentState === "settings"`, so it could open Settings but could not close it.
+- Removed the Settings Back button from `popup.html`; Settings now exits through the same gear button.
+- `showState()` now updates the gear's `.settings-active` class, `aria-pressed`, `aria-label`, and title so Settings mode is visibly and accessibly indicated.
+- Closing Settings restores the prior main popup state when available, otherwise falls back to the correct scan/result/scanning state and refreshes active-tab detection through `loadState()`.
+- Local popup harness verified `main -> settings -> main` on a ChatGPT URL while preserving `CHATGPT`, Scan Chat visibility, gear active state, title, and `aria-pressed`.
+- No site files, parsers, health scoring, handoff generation, ZIP writer logic, or migration package logic were changed.
+- No new durable product or architecture decision was made.
+
+## Previous Code Change
+
+- Fixed shared popup initialization regression where the popup body stayed blank and the platform row stayed `—`.
+- Root cause: `popup.js` attempted to bind a click listener to `#btnBack`, but the current `popup.html` no longer contained that element. The thrown error stopped the init block before `renderIdle()` and `loadState()` ran.
+- Added guarded popup event binding via `on(id, eventName, handler)` so missing optional elements log a warning instead of stopping popup initialization.
+- Restored the Settings Back button in `popup.html`.
+- Added shared `detectPlatformFromUrl(url)` and `updatePlatformDisplay(platform)` helpers in `popup.js`.
+- Updated `loadState()` to use shared active-tab platform detection and immediately render the Scan Chat idle view on supported Claude/ChatGPT pages, even when `ENGRAM_GET_STATE` is null/unavailable.
+- Local popup harness verified `https://claude.ai/chat/...` renders `CLAUDE` with Scan enabled, and both `https://chatgpt.com/c/...` plus `https://chat.openai.com/c/...` render `CHATGPT` with Scan enabled.
+- No site files, parser behavior, health scoring, ZIP writer logic, Generate Handoff logic, or Migration Package ZIP logic were changed in this pass.
+- No new durable product or architecture decision was made.
+
+## Previous Code Change
+
+- Added `getPlatformId()` and `getPlatformDisplayName()` helpers in `extension/popup/popup.js`.
+- Updated generated handoff, full chat export, README package summary, health snapshots, and migration package manifest to use platform helpers instead of hardcoded Claude defaults.
+- Added ChatGPT popup platform display (`CHATGPT`, `#10a37f`) and replaced Claude-only reload/open-page error copy with platform-neutral wording.
+- Restored cap-based health calibration v5 in the popup. Simulated checks: tiny chat `100 / Low / Safe to continue`; Forrest dense payload `83 / Moderate / Safe for now, but consider handoff soon`; Subway code-heavy workflow `70 / Elevated / Consider handoff soon`; 9k text-only control `95 / Low / Safe to continue`.
+- Added ChatGPT parser metadata fields: `veryLargeMessageCount`, `hugeMessageCount`, and `likelyEmbeddedTranscript`.
+- No site files, ZIP writer logic, Claude parser behavior, Scan Chat logic, Generate Handoff logic, or Migration Package ZIP logic were changed in this pass.
+- No new durable product or architecture decision was made.
+
+- Added the official user-provided Engram logo PNG assets.
+- Copied the transparent icon and wordmark into `site/public/assets/` and `extension/assets/`.
+- Updated the landing page header, favicon, hero accent, product mock branding, and footer to use the official logo assets without changing the site positioning or product claims.
+- Updated the popup header to use the official icon next to the visible `Engram` wordmark; settings, mini widget, manifest icons, and extension behavior were left unchanged.
+- Updated the static site build/preview scripts so `site/public/assets` is copied to `site/dist` and served during local preview.
+- No Health Meter, Scan Chat, Generate Handoff, Migration Package ZIP, parser, mini-widget drag, or backend behavior changed.
+- No new durable product or architecture decision was made.
+
+## Verification
+
+- `npm.cmd run build` from `site/`
+- `node --check extension/popup/popup.js`
+- `node --check extension/platforms/claude/parser.js`
+- `node --check extension/utils/zip-writer.js`
+- `node --check site/scripts/build.mjs`
+- `node --check site/scripts/serve.mjs`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+
+## Previous Code Change
+
+- Added lightweight motion polish to the static landing page under `site/`.
+- `site/src/styles.css` now includes subtle hero entrance animation, product mock glow, card/workflow hover states, slow background aura/grid movement, status glow, and a `prefers-reduced-motion` override.
+- `site/src/main.js` now adds IntersectionObserver-based scroll reveal classes and disables pointer/tilt/reveal animation behavior for reduced-motion users.
+- Extension functionality and extension files were not changed for this motion pass.
+- No new durable product or architecture decision was made.
+
+## Previous Verification
+
+- `npm.cmd run build` from `site/`
+- `node --check site/src/main.js`
+- `git diff --check -- site`
+
+## Previous Code Change
+
+- Added a separate public landing page under `site/`.
+- Built the site as a no-dependency static package with `site/src` source files, a Node build script, a local preview script, `vercel.json`, and `site/README.md`.
+- Landing page includes Hero, Feature cards, How it works, Screenshot placeholders, Privacy, and CTA sections using the uploaded midnight/violet/blue `DESIGN.md` visual direction.
+- Added `site/dist/` and `site/node_modules/` to `.gitignore`; the extension source and behavior were not changed for this site work.
+- Added a durable decision that the public landing page remains isolated as a separate static site under `site/`.
+
+## Previous Verification
+
+- `node --check site/scripts/build.mjs`
+- `node --check site/scripts/serve.mjs`
+- `node --check site/src/main.js`
+- `npm.cmd install`
+- `npm.cmd run build`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+- Direct `npm install` in PowerShell was blocked by the local `npm.ps1` execution policy; `npm.cmd install` passed.
+
+## Previous Code Change
+
+- Compacted the popup Health Meter layout in `extension/popup/popup.css`.
+- Reduced the gauge wrapper size, gauge card padding, internal spacing, label placement, status type size, and hint height.
+- Kept the existing Health Meter SVG/needle markup and all scoring, Scan Chat, Generate Handoff, ZIP export, Claude parser, storage, and LinkedIn behavior unchanged.
+- No new durable product or architecture decision was made.
+
+## Previous Verification
+
+- `node --check extension/popup/popup.js`
+- `node --check extension/platforms/claude/parser.js`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+
+## Previous Code Change
+
+- Applied the uploaded `DESIGN.md` visual system to the compact extension UI.
+- Rebuilt `extension/popup/popup.css` around the design tokens: deep black/midnight surfaces, translucent card backgrounds, subtle borders, violet primary CTAs, blue migration-package actions, muted secondary text, 16px cards, 12px buttons, and 10px inputs.
+- Refined popup hierarchy through styling only: gauge, health panel, stats, migration package, actions, and settings now use consistent card/button treatments without changing popup behavior.
+- Updated Mini Health Widget injected CSS to use the same midnight glass surface, violet Engram label, subtle border, compact typography, and 16px radius.
+- Did not change health scoring, Scan Chat, Generate Handoff, ZIP export logic, storage logic, message extraction, or LinkedIn files.
+- No new durable product or architecture decision was made.
+
+## Previous Verification
+
+- `node --check extension/platforms/claude/parser.js`
+- `node --check extension/popup/popup.js`
+- `node --check extension/utils/zip-writer.js`
+- `git diff --check` passed with only existing Git config/CRLF warnings.
+
+## Previous Code Change
 
 - Unified Mini Health Widget and popup status naming.
 - Estimated widget mode now maps visible chat data to `Safe`, `Fair`, `Risky`, or `Critical` instead of `Likely ...` labels; small chats now show `Safe`, matching the popup vocabulary.
@@ -49,7 +183,7 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 - Prior drag positioning, Settings toggle, scan logic, handoff, ZIP export, exact snapshot matching, and MutationObserver widget-ignore behavior were preserved.
 - No new durable product or architecture decision was made.
 
-## Verification
+## Previous Verification
 
 - `node --check extension/platforms/claude/parser.js`
 - `node --check extension/popup/popup.js`
