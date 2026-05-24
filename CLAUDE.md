@@ -1,85 +1,103 @@
-# Engram — Project Context for Claude Code
+# Engram - Project Context for Claude Code
 
-## Что это
-Браузерное расширение (Firefox + Chrome) для сохранения непрерывности AI-сессий.
-Следит за деградацией длинных чатов и генерирует handoff-пакет для продолжения в новом чате.
+## What This Is
 
-## Хакатон
+Engram is a Firefox and Chrome browser extension for preserving continuity in AI-assisted work sessions.
+It watches for degradation in long chats and generates a handoff package so the user can continue in a fresh chat.
+
+## Hackathon
+
 - Scale Without Borders AI Hackathon
-- Дедлайн сабмита: 24 мая 2025, 11:59 PM EST
-- Demo Day: 27 мая 2025
-- Платформа сабмита: Devpost
-- Критерии (по 25%): Problem & Impact, Technical Execution, Creativity & Innovation, Pitch & Demo
+- Submission deadline: May 24, 2025, 11:59 PM EST
+- Demo Day: May 27, 2025
+- Submission platform: Devpost
+- Judging criteria, 25% each: Problem and Impact, Technical Execution, Creativity and Innovation, Pitch and Demo
 
-## Ключевые решения принятые в проекте
+## Key Project Decisions
 
-### Платформы
-- MVP: Claude.ai (приоритет)
-- Планируется: Gemini (заглушка уже есть)
-- НЕ ChatGPT (нет подписки для демо)
+### Platforms
 
-### AI для handoff генерации
-- Gemini 1.5 Flash (бесплатный tier)
-- НЕ локальные модели (сложно для хакатона)
-- НЕ Gemini 2.5 Flash (списывает деньги из-за thinking режима)
+- MVP: Claude.ai is the priority.
+- Planned: Gemini, with a stub already present.
+- ChatGPT was not the original demo priority because no demo subscription was available.
 
-### Браузер
-- Firefox (основной у разработчика)
-- Кросс-браузерная архитектура через utils/compat.js
+### AI For Handoff Generation
 
-### Хранилище
-- IndexedDB (через background/worker.js)
-- Каждый проект изолирован по projectId
-- Global: настройки и шаблоны (shared)
+- Gemini 1.5 Flash was the planned free-tier option.
+- Do not rely on local models for the hackathon build.
+- Avoid Gemini 2.5 Flash for this MVP because thinking-mode billing was a concern.
 
-## Структура проекта
-```
+### Browser
+
+- Firefox is the primary developer test browser.
+- Preserve cross-browser architecture through `utils/compat.js`.
+
+### Storage
+
+- IndexedDB is used through `background/worker.js`.
+- Each project is isolated by `projectId`.
+- Global settings and templates are shared.
+
+## Project Structure
+
+```text
 engram-extension/
   extension/
     manifest.json              # MV3, Firefox + Chrome
     utils/
       compat.js                # Browser/Chrome API shim
     platforms/
-      base/parser.js           # Общий интерфейс парсеров
-      claude/parser.js         # Claude.ai DOM парсер (MVP)
-      gemini/parser.js         # Заглушка (TODO)
+      base/parser.js           # Shared parser interface
+      claude/parser.js         # Claude.ai DOM parser (MVP)
+      gemini/parser.js         # Stub (TODO)
     background/
-      worker.js                # Service worker, IndexedDB, handoff логика
+      worker.js                # Service worker, IndexedDB, handoff logic
     storage/
-      storage.js               # IndexedDB wrapper (устаревший, логика перенесена в worker.js)
+      storage.js               # Legacy IndexedDB wrapper; logic moved to worker.js
     popup/
-      popup.html / .css / .js  # UI расширения
+      popup.html / .css / .js  # Extension UI
   README.md
 ```
 
-## Текущий статус
-- [x] Базовая структура расширения создана
-- [x] Загружается в Firefox без ошибок
-- [x] Фоновый скрипт выполняется
-- [ ] Исправить "No listener" ошибку между content script и background
-- [ ] Проверить что MutationObserver захватывает сообщения Claude.ai
-- [ ] Реализовать Gemini парсер
-- [ ] Интегрировать Gemini 1.5 Flash API для handoff генерации
-- [ ] Финальный UI popup
-- [ ] Демо видео для Devpost
+## Current Status
 
-## Известные проблемы
-1. Firefox MV3: async IIFE + return true + sendResponse не работает в Firefox.
-   Firefox ожидает либо Promise из async-слушателя, либо синхронный sendResponse.
-2. browser.runtime.sendMessage с callback не поддерживается в Firefox — нужен Promise стиль.
-3. compat.js вызывает _api.runtime.sendMessage(msg, callback) когда _api === browser — неправильно.
+- [x] Basic extension structure created.
+- [x] Loads in Firefox without errors.
+- [x] Background script runs.
+- [ ] Fix the "No listener" issue between content script and background.
+- [ ] Verify Claude.ai MutationObserver message capture.
+- [ ] Implement Gemini parser.
+- [ ] Integrate Gemini 1.5 Flash API for handoff generation.
+- [ ] Finish popup UI.
+- [ ] Create Devpost demo video.
 
-## Важные принципы
-- Легковесный мониторинг (MutationObserver, не polling)
-- Инкрементальная обработка (не пересканировать весь чат)
-- Проект-изолированное хранение данных
-- Handoff = один вызов AI при нажатии кнопки (не continuously)
+## Known Issues
 
-## Companion tool
-В папке C:\Users\temir\Documents\Web_Projects\AI_Knowledge_Base\
-есть локальный инструмент базы знаний (kb.py) — отдельно от этого репо.
+1. Firefox MV3: async IIFE + `return true` + `sendResponse` does not work in Firefox.
+   Firefox expects either a Promise from an async listener or a synchronous `sendResponse`.
+2. `browser.runtime.sendMessage` with a callback is not supported in Firefox; Promise style is required.
+3. `compat.js` calls `_api.runtime.sendMessage(msg, callback)` when `_api === browser`, which is incorrect.
 
-## Позиционирование продукта
-НЕ: "Мы клонируем чаты"
-ДА: "Continuity layer для AI-assisted workflows"
-Слоган: "Keep the thread. Never lose context."
+## Important Principles
+
+- Lightweight monitoring with MutationObserver, not polling.
+- Incremental processing; do not rescan the whole chat continuously.
+- Project-isolated data storage.
+- Handoff generation is one AI call when the user clicks the button, not continuous background work.
+
+## Companion Tool
+
+The local knowledge-base tool lives outside this repo at:
+
+```text
+C:\Users\temir\Documents\Web_Projects\AI_Knowledge_Base\
+```
+
+It contains `kb.py` and is separate from Engram.
+
+## Product Positioning
+
+Do not position Engram as cloning chats.
+Position it as a continuity layer for AI-assisted workflows.
+
+Slogan: "Keep the thread. Never lose context."

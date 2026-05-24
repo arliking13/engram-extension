@@ -77,6 +77,7 @@ Ship a demoable Engram extension flow:
 - [x] Make Settings gear toggle main/settings views and remove the Back button from the current popup UI.
 - [x] Add active/pressed Settings gear state while Settings is open.
 - [x] Wire popup website CTAs to `https://engram-blush-tau.vercel.app/`.
+- [x] Remove/translate all Cyrillic text from tracked project documentation and verify tracked text files are English-only.
 
 ## In Progress
 

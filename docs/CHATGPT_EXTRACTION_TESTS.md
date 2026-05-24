@@ -62,7 +62,7 @@ nodes with identical text → two separate messages. This is intentional.
 
 ### 1.6 Repeated User Messages Preserved
 
-Consequence of source keys: `"привет"` sent three times = three DOM nodes = three source
+Consequence of source keys: `"hello"` sent three times = three DOM nodes = three source
 keys (`user:1`, `user:7`, `user:15`) = three messages in the output. The `sentMessageKeys`
 dedup uses source keys (not text) for DOM messages, so all three are sent.
 
@@ -80,8 +80,8 @@ function cleanAssistantText(text) {
 }
 ```
 
-Plus `collapseRepeatedText()` for "Привет!Привет!" → "Привет!".
-Plus `isTimestampOrDateOnly()` to filter "14:02" or "21 мая" as assistant message candidates.
+Plus `collapseRepeatedText()` for "Hello!Hello!" -> "Hello!".
+Plus `isTimestampOrDateOnly()` to filter "14:02" or "May 21" as assistant message candidates.
 
 ### 1.8 Code Block Counting
 

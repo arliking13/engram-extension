@@ -86,9 +86,9 @@ What changed in prior pass (Settings / Demo Mode pass):
 What changed in prior passes:
 - Claude parser now uses per-DOM-node source keys for DOM-captured messages so repeated user text in separate bubbles is counted.
 - DOM extraction no longer globally dedupes messages by `role:text`.
-- Assistant timestamp/date-only candidates are filtered, including `HH:MM` and Russian date labels such as `21 мая`.
+- Assistant timestamp/date-only candidates are filtered, including `HH:MM` and localized date labels such as `May 21`.
 - Assistant lines containing `Thinking about` or `Deciphered` are removed.
-- Adjacent doubled assistant text is collapsed, including forms like `Привет!Привет!` and `Хорошо!Хорошо! 👍`.
+- Adjacent doubled assistant text is collapsed, including forms like `Hello!Hello!` and `All right!All right!`.
 - Popup now tracks `isScanning`, `hasLocalScanResult`, and `lastRenderSource` so background state polling cannot overwrite active/completed scans.
 - After `ENGRAM_SCAN_COMPLETE`, popup renders and keeps `doneView` from local scan data even if `ENGRAM_GET_STATE` later returns null.
 - Scan Chat is disabled while scanning to prevent spam/race clicks.

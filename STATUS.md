@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-24 by Codex.
+Last updated: 2026-05-25 by Codex.
 
 ## Snapshot
 
@@ -36,6 +36,7 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 - Popup platform metadata now resolves ChatGPT, Claude.ai, Gemini, or Unknown from scan metadata and source URL.
 - Popup ChatGPT display branch now shows `CHATGPT` in OpenAI green on ChatGPT pages.
 - Popup health scoring is restored to cap-based calibration v5 for dense ChatGPT/code-heavy payloads while keeping browser load separate from migration risk.
+- Tracked text files are English-only after translating/removing Cyrillic project memory and extraction-test examples.
 
 ## Known Issues To Preserve
 
@@ -54,11 +55,12 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 
 ## Last Code Change
 
-- Wired popup website CTAs to the deployed Engram landing page.
-- Added `ENGRAM_SITE_URL = "https://engram-blush-tau.vercel.app/"` in `extension/popup/popup.js`.
-- Added a cross-browser `tabsCreate()` helper and shared `openEngramSite()` handler.
-- Bound the header Engram logo, main `Learn how Engram works` link, and Settings `Open Engram Website` CTA to the same deployed URL.
-- No site files, parsers, health scoring, handoff generation, ZIP writer logic, or migration package logic were changed.
+- Removed Cyrillic text from tracked project documentation and memory files.
+- Translated `CLAUDE.md` to English.
+- Replaced Cyrillic example strings in `HANDOFF.md`, `STATUS.md`, and `docs/CHATGPT_EXTRACTION_TESTS.md` with English examples.
+- Verified tracked text files contain no Cyrillic characters.
+- Ran `node --check` for `extension/background/worker.js`, `extension/popup/popup.js`, `extension/platforms/chatgpt/parser.js`, and `extension/platforms/claude/parser.js`.
+- Ran `npm.cmd --prefix site run build`; PowerShell blocked `npm --prefix site run build` because `npm.ps1` scripts are disabled.
 - No new durable product or architecture decision was made.
 
 ## Previous Code Change
@@ -265,10 +267,10 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 ## Previous Code Change
 
 - Updated `extension/platforms/claude/parser.js` message identity so DOM messages use stable per-node source keys instead of global `role:text` dedupe.
-- Repeated user messages such as "привет", "хорошо", and "окей" should now count when they are separate DOM message nodes.
-- Assistant timestamp/date-only candidates such as `14:02` and `21 мая` are filtered.
+- Repeated user messages such as "hello", "all right", and "okay" should now count when they are separate DOM message nodes.
+- Assistant timestamp/date-only candidates such as `14:02` and `May 21` are filtered.
 - Assistant internal/thinking lines containing `Thinking about` or `Deciphered` are skipped.
-- Adjacent doubled assistant text such as `Привет!Привет!` and `Хорошо!Хорошо! 👍` is collapsed.
+- Adjacent doubled assistant text such as `Hello!Hello!` and `All right!All right!` is collapsed.
 - Added popup render-race guards: `isScanning`, `hasLocalScanResult`, `lastRenderSource`, `renderDone()`, and `keepLocalScanResult()`.
 - Scan Chat is disabled during scanning and re-enabled after completion/failure.
 - If Scan Chat returns `ENGRAM_SCAN_COMPLETE`, the popup keeps `doneView` visible even if background state polling later fails.
