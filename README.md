@@ -1,114 +1,210 @@
-# Engram — AI Chat Continuity Extension
+﻿# Engram — AI Chat Continuity Extension
 
-> Keep the thread. Never lose context.
+Keep the thread. Never lose context.
 
-Engram is a Firefox browser extension that helps preserve context from long AI-assisted work sessions and move that work into a new chat when the original conversation becomes too heavy, unstable, or difficult to continue.
+Engram is a Firefox browser extension that helps preserve context from long AI-assisted work sessions and move work into a new chat when the original conversation becomes too heavy, unstable, or difficult to continue.
 
-It scans supported AI chat pages, tracks conversation health, exports structured context, and generates handoff packages that can be pasted into a fresh AI session.
-
-For the hackathon build, Engram also includes a lightweight LinkedIn Job Prompt Bridge: it detects job details from LinkedIn job pages and turns them into a structured AI analysis prompt for evaluating legitimacy, red flags, remote-work quality, salary transparency, and applicant fit.
+It is designed for developers, students, builders, hackathon participants, and anyone who uses AI chats for long technical workflows.
 
 ---
 
-## Problem
+## Quick Install on Firefox
 
-AI tools are powerful for long technical workflows, but long chats often become harder to continue over time.
+This is the fastest way to test Engram locally in Firefox.
 
-Common issues:
+### 1. Clone the repository
 
-- the model loses track of earlier decisions
-- important project context gets buried
-- generated files, code changes, and reasoning become scattered
-- users need to start a new chat but do not have a clean handoff
-- job-search workflows require repeatedly copying job descriptions into AI tools manually
+~~~bash
+git clone https://github.com/arliking13/engram-extension.git
+cd engram-extension
+~~~
 
-Engram is designed as a continuity layer for this kind of AI-assisted work.
+### 2. Open Firefox temporary extensions page
 
----
+Open this page in Firefox:
 
-## Solution
+~~~text
+about:debugging#/runtime/this-firefox
+~~~
 
-Engram helps users capture, preserve, and transfer work context.
+Or manually go to:
 
-Core workflow:
+~~~text
+about:debugging
+→ This Firefox
+~~~
 
-1. Open a supported AI chat.
-2. Use Engram to scan the conversation.
-3. Review conversation health and captured content.
-4. Export the session or generate a structured handoff.
-5. Paste the handoff into a new AI chat and continue the work.
+### 3. Load Engram
 
-Hackathon job workflow:
+Click:
 
-1. Open a LinkedIn job page.
-2. Engram detects the job title, company, location, work mode, and description.
-3. Click **Copy AI Prompt**.
-4. Paste the prompt into Claude, ChatGPT, Gemini, or another AI assistant.
-5. The AI evaluates the job posting using a structured checklist.
+~~~text
+Load Temporary Add-on
+~~~
 
----
+Then select:
 
-## Key Features
+~~~text
+extension/manifest.json
+~~~
 
-### AI Chat Continuity
+Engram should now appear in the Firefox toolbar.
 
-- scans long AI chat sessions
-- captures messages and context
-- tracks conversation health
-- exports session content
-- generates handoff prompts for continuing work in a new chat
+### 4. Test the extension
 
-### LinkedIn Job Prompt Bridge
+Open one of the supported pages:
 
-- detects LinkedIn job pages
-- extracts structured job details
-- identifies work mode: remote, hybrid, or onsite
-- copies a structured job-analysis prompt
-- keeps the product focused on AI workflow continuity rather than becoming a full job board or verifier
+~~~text
+https://chatgpt.com/
+https://claude.ai/
+https://www.linkedin.com/jobs/
+~~~
 
-### Demo and Self-Hosted AI Settings
-
-Engram is designed around two modes:
-
-- **Demo Mode** — extension calls a hosted backend endpoint for handoff generation.
-- **Self-hosted / Custom Mode** — users can point Engram to their own backend endpoint.
-
-API keys are intended to live server-side in backend environment variables, not hardcoded inside the extension.
+Then open the Engram popup and run a scan.
 
 ---
 
-## Supported Platforms
+## Important Firefox Note
+
+This is a temporary Firefox installation.
+
+If you restart Firefox, the extension may disappear. Load it again through:
+
+~~~text
+about:debugging#/runtime/this-firefox
+~~~
+
+During development, after changing extension files, use the `Reload` button on the same Firefox debugging page.
+
+---
+
+## What Engram Does
+
+Engram has two main product layers.
+
+### 1. AI Chat Continuity
+
+Supported AI platforms:
 
 | Platform | Status |
 |---|---|
-| Claude.ai | MVP working |
-| LinkedIn Jobs | MVP working |
-| Gemini | Experimental / stub |
+| ChatGPT | Working / in development |
+| Claude.ai | Working / in development |
+
+Core features:
+
+- scan long AI chat sessions
+- count user and assistant messages
+- detect chat health
+- preserve useful context
+- generate handoff / migration packages
+- continue work in a new AI chat with less context loss
+
+### 2. Job Context Continuity
+
+Supported job sources:
+
+| Source | Status |
+|---|---|
+| LinkedIn Jobs | Working / in development |
+
+Core features:
+
+- detect LinkedIn job pages
+- extract structured job details
+- save job context
+- prepare AI-ready job application context
+- keep job search work connected to AI workflows
+
+LinkedIn Jobs is treated as a job source, not as an AI platform.
+
+---
+
+## Current Status
+
+Engram is currently in active development.
+
+Current checkpoint includes:
+
+- improved active scan session handling
+- ChatGPT scan support
+- Claude.ai scan support
+- LinkedIn Jobs context support
+- handoff / migration package generation
+- cleaner export formatting
+- Firefox temporary extension loading support
+
+Known remaining work:
+
+- improve migration package validation
+- stabilize fresh export scan behavior
+- polish product UI
+- prepare a packaged release build
 
 ---
 
 ## Project Structure
 
-```text
+~~~text
 extension/
   manifest.json
   background/
-    worker.js
-  platforms/
-    claude/
-      parser.js
-    gemini/
-      parser.js
-    jobs/
-      job-detector.js
-      linkedin-parser.js
-      job-widget.js
   popup/
-    popup.html
-    popup.css
-    popup.js
-  options/
-    options.html
-    options.js
+  platforms/
+    chatgpt/
+    claude/
+    jobs/
   storage/
-    storage.js
+  utils/
+
+site/
+  public/
+  app/
+~~~
+
+The Firefox extension is loaded from:
+
+~~~text
+extension/manifest.json
+~~~
+
+---
+
+## Development Workflow
+
+After editing extension files:
+
+1. Open Firefox.
+2. Go to:
+
+~~~text
+about:debugging#/runtime/this-firefox
+~~~
+
+3. Find Engram.
+4. Click `Reload`.
+5. Reopen the Engram popup and test again.
+
+---
+
+## Demo / Self-Hosted AI Settings
+
+Engram is designed so AI API keys are not hardcoded into the browser extension.
+
+Recommended architecture:
+
+~~~text
+browser extension
+→ backend API route
+→ AI provider API
+~~~
+
+For demo mode, the backend endpoint should keep API keys server-side.
+
+For custom or self-hosted use, users should be able to deploy their own backend and connect Engram to that endpoint.
+
+---
+
+## License
+
+This project is currently maintained as an active development / hackathon project.
