@@ -1,5 +1,5 @@
-﻿/**
- * Engram Popup â€” State Machine & UI Logic
+/**
+ * Engram Popup — State Machine & UI Logic
  */
 
 const $ = (id) => document.getElementById(id);
@@ -7,6 +7,9 @@ const _api = typeof browser !== "undefined" ? browser : chrome;
 const isFirefox = typeof browser !== "undefined";
 
 console.log("[Engram] popup loaded");
+
+const ENGRAM_DEBUG_POPUP = false;
+function _dpbg(...args) { if (ENGRAM_DEBUG_POPUP) console.log("[Engram][Popup][debug]", ...args); }
 
 function on(id, eventName, handler) {
   const el = $(id);
@@ -90,6 +93,7 @@ const DEFAULT_SETTINGS = {
   customApiKey: "",
   customEndpoint: "",
   showMiniHealthWidget: false,
+  linkedInWidgetEnabled: true,
 };
 let engramSettings = { ...DEFAULT_SETTINGS };
 
@@ -104,6 +108,16 @@ async function loadSettings() {
   } catch (e) {
     console.log("[Engram] settings load failed, using defaults");
   }
+}
+
+function syncLinkedInToggles() {
+  const isOn = engramSettings.linkedInWidgetEnabled !== false;
+  ["btnLinkedInWidgetToggle", "btnLinkedInWidgetToggleMain"].forEach((id) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.textContent = isOn ? "On" : "Off";
+    btn.classList.toggle("on", isOn);
+  });
 }
 
 function applySettingsToUI() {
@@ -130,6 +144,8 @@ function applySettingsToUI() {
     widgetToggle.textContent = on ? "On" : "Off";
     widgetToggle.classList.toggle("on", on);
   }
+
+  syncLinkedInToggles();
 }
 
 function updateModeToggle(mode) {
@@ -166,11 +182,12 @@ async function saveSettings() {
   const providerSelect   = $("selectProvider");
 
   const next = {
-    mode:                engramSettings.mode,
-    customProvider:      providerSelect   ? providerSelect.value           : "openai",
-    customApiKey:        apiKeyInput      ? apiKeyInput.value              : "",
-    customEndpoint:      customEndpointEl ? customEndpointEl.value.trim()  : "",
+    mode:                 engramSettings.mode,
+    customProvider:       providerSelect   ? providerSelect.value           : "openai",
+    customApiKey:         apiKeyInput      ? apiKeyInput.value              : "",
+    customEndpoint:       customEndpointEl ? customEndpointEl.value.trim()  : "",
     showMiniHealthWidget: !!engramSettings.showMiniHealthWidget,
+    linkedInWidgetEnabled: engramSettings.linkedInWidgetEnabled !== false,
   };
 
   // In Demo Mode, don't persist sensitive fields
@@ -188,7 +205,7 @@ async function saveSettings() {
     const btn = $("btnSaveSettings");
     if (btn) {
       const orig = btn.textContent;
-      btn.textContent = "Saved âœ“";
+      btn.textContent = "Saved ✓";
       btn.disabled = true;
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
     }
@@ -197,7 +214,7 @@ async function saveSettings() {
   }
 }
 
-// AI handoff via Vercel proxy â€” fails safely back to local export
+// AI handoff via Vercel proxy — fails safely back to local export
 async function tryAIHandoff() {
   let endpoint;
 
@@ -237,7 +254,7 @@ async function tryAIHandoff() {
     }
 
     await navigator.clipboard.writeText(prompt);
-    $("statusBar").textContent = "âœ“ AI Handoff copied to clipboard!";
+    $("statusBar").textContent = "✓ AI Handoff copied to clipboard!";
     $("statusBar").style.color = "#22c55e";
     clearStatusBarLater($("statusBar").textContent, 3000);
     return true;
@@ -290,6 +307,7 @@ function showState(state) {
   $("scanningView").style.display = state === "scanning" ? "block" : "none";
   $("doneView").style.display     = state === "done"     ? "block" : "none";
   $("settingsView").style.display = state === "settings" ? "block" : "none";
+  $("linkedinView").style.display = state === "linkedin" ? "block" : "none";
   updateSettingsButtonState(state === "settings");
 }
 
@@ -625,9 +643,11 @@ function detectPlatformFromUrl(url = "") {
     return "chatgpt";
   }
   if (host === "gemini.google.com" || host.endsWith(".gemini.google.com")) return "gemini";
+  if (host === "www.linkedin.com" || host.endsWith(".linkedin.com")) return "linkedin";
   if (raw.includes("claude.ai")) return "claude";
   if (raw.includes("chatgpt.com") || raw.includes("chat.openai.com")) return "chatgpt";
   if (raw.includes("gemini.google.com")) return "gemini";
+  if (raw.includes("linkedin.com")) return "linkedin";
   return "other";
 }
 
@@ -637,9 +657,10 @@ function updatePlatformDisplay(platform) {
   if (!logoEl || !nameEl) return;
 
   const platformInfo = {
-    claude:  { label: "CLAUDE",  color: "#fc5000", logo: PLATFORM_LOGOS.claude,  alt: "Claude logo" },
-    chatgpt: { label: "CHATGPT", color: "#10a37f", logo: PLATFORM_LOGOS.chatgpt, alt: "ChatGPT logo" },
-    other:   { label: "",        color: "#888",    logo: "",                    alt: "" },
+    claude:   { label: "CLAUDE",   color: "#fc5000", logo: PLATFORM_LOGOS.claude,  alt: "Claude logo" },
+    chatgpt:  { label: "CHATGPT",  color: "#10a37f", logo: PLATFORM_LOGOS.chatgpt, alt: "ChatGPT logo" },
+    linkedin: { label: "LINKEDIN", color: "#0a66c2", logo: "",                      alt: "" },
+    other:    { label: "",         color: "#888",    logo: "",                      alt: "" },
   }[platform] || { label: "", color: "#888", logo: "", alt: "" };
 
   nameEl.textContent = platformInfo.label;
@@ -705,7 +726,7 @@ async function refreshActivePlatformFromTab() {
   }
 }
 
-// â”€â”€ Health computation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Health computation ──────────────────────────────────────────
 
 function computeHealthFromScan(sr) {
   const msgs = sr.messages || [];
@@ -863,7 +884,7 @@ function computeHealthFromScan(sr) {
   const userText = msgs.filter(m => m.role === "user").map(m => m.text || "").join(" ").toLowerCase();
   const correctionPhrases = [
     "actually,", "wait,", "no,", "instead,", "let's reset", "start over", "ignore that", "scratch that", "never mind",
-    "Ñ‚Ñ‹ Ð½Ðµ Ð¿Ð¾Ð½ÑÐ»", "Ð½Ðµ Ñ‚Ð°Ðº", "Ð´Ð°Ð²Ð°Ð¹ Ð¸Ð½Ð°Ñ‡Ðµ", "ÑÐ½Ð¾Ð²Ð°", "Ñ‚Ñ‹ ÑƒÑÐ»Ð¾Ð¶Ð½ÑÐµÑˆÑŒ", "Ð½Ðµ Ñ‚Ð¾", "Ð·Ð°Ñ‡ÐµÐ¼ Ñ‚Ñ‹", "Ð¼Ñ‹ Ð¶Ðµ", "Ñ ÑƒÐ¶Ðµ Ð³Ð¾Ð²Ð¾Ñ€Ð¸Ð»", "Ñ‚Ñ‹ Ð½Ðµ Ð¾Ñ‚Ð²ÐµÑ‚Ð¸Ð»", "Ð½Ðµ Ð²Ñ‹Ð´ÑƒÐ¼Ñ‹Ð²Ð°Ð¹",
+    "ты не понял", "не так", "давай иначе", "снова", "ты усложняешь", "не то", "зачем ты", "мы же", "я уже говорил", "ты не ответил", "не выдумывай",
   ];
   const correctionCount = correctionPhrases.reduce((n, p) => n + (userText.split(p).length - 1), 0);
   const continuityRiskPressure = Math.min(100, correctionCount >= 10 ? 40 : correctionCount >= 5 ? 25 : correctionCount >= 2 ? 10 : 0);
@@ -1017,7 +1038,7 @@ function generateHandoffMarkdown(sr, hd) {
     })
     .join("\n\n---\n\n");
 
-  // Code blocks â€” last 5, capped at 800 chars each
+  // Code blocks — last 5, capped at 800 chars each
   const allCode = msgs.flatMap(m => m.codeBlocks || []).filter(c => c.code.length > 30);
   const codeCountStat = sr.codeCount || 0;
   let codeSection;
@@ -1035,7 +1056,7 @@ function generateHandoffMarkdown(sr, hd) {
 
   const ts = new Date().toISOString();
   const totalKb = Math.round((sr.totalChars || 0) / 1000);
-  const riskStr = hd ? `${hd.score}% â€” ${hd.migrationRisk} risk` : "â€”";
+  const riskStr = hd ? `${hd.score}% — ${hd.migrationRisk} risk` : "—";
 
   const signalsParts = [];
   if (filePaths.length)  signalsParts.push("**File paths:**\n" + filePaths.map(p => `- \`${p}\``).join("\n"));
@@ -1057,11 +1078,11 @@ function generateHandoffMarkdown(sr, hd) {
 - **Generated:** ${ts}
 
 ## Chat Health at Migration
-- **Chat Health:** ${hd ? hd.score + "%" : "â€”"}
-- **Migration Risk:** ${hd?.migrationRisk ?? "â€”"}
-- **Browser Load:** ${hd?.browserLoad ?? "â€”"}
+- **Chat Health:** ${hd ? hd.score + "%" : "—"}
+- **Migration Risk:** ${hd?.migrationRisk ?? "—"}
+- **Browser Load:** ${hd?.browserLoad ?? "—"}
 ${hd?.reasons?.length ? "- **Reasons:**\n" + hd.reasons.map(r => `  - ${r}`).join("\n") + "\n" : ""}
-- **Recommendation:** ${hd?.action ?? "â€”"}
+- **Recommendation:** ${hd?.action ?? "—"}
 
 ## Captured Stats
 - User messages: ${sr.userCount || 0}
@@ -1098,7 +1119,7 @@ Please acknowledge this handoff and confirm what we should focus on first.
 `;
 }
 
-// â”€â”€ Migration package generators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Migration package generators ────────────────────────────────
 
 function generateFullChatExport(sr) {
   const msgs = sr.messages || [];
@@ -1169,14 +1190,14 @@ function generateTechnicalSignalsMd(sr) {
 
 function generateReadme(sr, hd) {
   const ts = new Date().toISOString();
-  return `# Engram Migration Package â€” Start Here
+  return `# Engram Migration Package — Start Here
 
 This package was generated by **Engram** to help you continue an AI-assisted work session in a fresh chat.
 
 ## How to use this package
 
-1. **Start with \`handoff.md\`** â€” paste it into your new AI chat to restore context.
-2. **Use \`full-chat-export.md\` only if more detail is needed** â€” it contains the full captured conversation.
+1. **Start with \`handoff.md\`** — paste it into your new AI chat to restore context.
+2. **Use \`full-chat-export.md\` only if more detail is needed** — it contains the full captured conversation.
 3. **Check \`technical-signals.md\`** for file paths, git commands, errors, and TODOs.
 4. **Check \`attachments/user-added/\`** for any files you manually included.
 5. If a referenced file is missing from the attachments, ask the user to upload it.
@@ -1186,7 +1207,7 @@ This package was generated by **Engram** to help you continue an AI-assisted wor
 - **Source:** ${getPlatformDisplayName(sr)}
 - **Chat Title:** ${sr.sourceTitle || "Untitled chat"}
 - **URL:** ${sr.url || "unknown"}
-- **Chat Health:** ${hd ? hd.score + "%" : "â€”"} (${hd?.migrationRisk ?? "â€”"} risk)
+- **Chat Health:** ${hd ? hd.score + "%" : "—"} (${hd?.migrationRisk ?? "—"} risk)
 - **Total messages:** ${sr.total || 0}
 - **Generated:** ${ts}
 
@@ -1202,7 +1223,7 @@ This package was generated by **Engram** to help you continue an AI-assisted wor
 
 ---
 
-_Generated by Engram â€” continuity layer for AI-assisted workflows._
+_Generated by Engram — continuity layer for AI-assisted workflows._
 `;
 }
 
@@ -1263,7 +1284,7 @@ async function buildMigrationPackage(sr, hd, userFiles) {
   };
 }
 
-// â”€â”€ Debug hook (no-op in production â€” toggle ENGRAM_VERBOSE_LOGS in parser.js) â”€â”€
+// ── Debug hook (no-op in production — toggle ENGRAM_VERBOSE_LOGS in parser.js) ──
 window.__ENGRAM_DEBUG__ = {
   computeHealthFromScan,
   generateHandoffMarkdown,
@@ -1277,6 +1298,7 @@ async function loadState() {
     console.log("[Engram] settings view kept during state refresh");
     return;
   }
+  _dpbg("loadState called", { isScanning, hasLocalScanResult, currentState, scanTotal: scanResults?.total ?? null });
   console.log("[Engram] requesting state");
 
   let tabs = [];
@@ -1303,6 +1325,13 @@ async function loadState() {
   updatePlatformDisplay(platform);
   updateSettingsPlatforms(platform);
 
+  // LinkedIn gets its own panel � skip all AI chat state logic
+  if (platform === "linkedin") {
+    showState("linkedin");
+    loadLinkedInView();
+    return;
+  }
+
   if (!isScanning && !hasLocalScanResult) {
     if (platform === "other") {
       renderIdle("Open ChatGPT or Claude to scan a chat", true);
@@ -1327,6 +1356,7 @@ async function loadState() {
   // Get data from worker
   runtimeSendMessage({ type: "ENGRAM_GET_STATE" }).then((res) => {
     console.log("[Engram] state response received", res);
+    _dpbg("ENGRAM_GET_STATE response", { isScanning, hasLocalScanResult, currentState, sessionId: res?.session?.id ?? null, hasSession: !!res?.session });
     if (!res) {
       if (isScanning || hasLocalScanResult) {
         console.log("[Engram] ignoring stale state response", {
@@ -1349,7 +1379,7 @@ async function loadState() {
     const session = res.session;
     const health = res.health;
 
-    // Update chat title â€” prefer scanned sourceTitle, fall back to session name
+    // Update chat title — prefer scanned sourceTitle, fall back to session name
     updateChatTitleEl(scanResults?.sourceTitle || session?.name || null);
 
     // Determine view state
@@ -1368,7 +1398,8 @@ async function loadState() {
       });
       keepLocalScanResult();
     } else {
-      // Not scanned yet
+      _dpbg("else branch reached", { isScanning, hasLocalScanResult, hasSession: !!session });
+      if (isScanning) return; // don't overwrite active scan state with unknown
       renderIdle(session ? "Scan to analyze this chat" : "State unknown. Scan Chat is still available.");
     }
   });
@@ -1394,7 +1425,9 @@ on("btnScan", "click", async () => {
       return;
     }
 
+    _dpbg("sending ENGRAM_START_SCAN", { tabId: tabs[0].id, url: tabs[0].url, activePlatform });
     const response = await tabsSendMessage(tabs[0].id, { type: "ENGRAM_START_SCAN" });
+    _dpbg("raw tabsSendMessage response", { type: response?.type, total: response?.total, partial: response?.partial, chatId: response?.chatId });
       if (!response) {
         isScanning = false;
         $("btnScan").disabled = false;
@@ -1404,6 +1437,7 @@ on("btnScan", "click", async () => {
 
       if (response.type === "ENGRAM_SCAN_COMPLETE") {
         console.log("[Engram] scan completed", response);
+        _dpbg("scan-complete branch", { total: response.total, userCount: response.userCount, aiCount: response.aiCount, partial: response.partial, strategy: response.extractionStrategy });
         isScanning = false;
         hasLocalScanResult = true;
         scanResults = response;
@@ -1425,7 +1459,7 @@ on("btnScan", "click", async () => {
 // Listen for scan progress
 _api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "ENGRAM_SCAN_PROGRESS") {
-    $("scanCount").textContent = `âŸ³ Scanning... ${msg.count} messages found`;
+    $("scanCount").textContent = `⟳ Scanning... ${msg.count} messages found`;
     $("scanProgress").style.width = msg.percent + "%";
   }
 
@@ -1458,10 +1492,10 @@ on("btnHandoff", "click", async () => {
     const markdown = generateHandoffMarkdown(scanResults, lastHealthData);
     try {
       await navigator.clipboard.writeText(markdown);
-      statusBar.textContent = "âœ“ Handoff copied to clipboard!";
+      statusBar.textContent = "✓ Handoff copied to clipboard!";
       statusBar.style.color = "#22c55e";
     } catch (e) {
-      // Clipboard blocked â€” fall back to download
+      // Clipboard blocked — fall back to download
       const blob = new Blob([markdown], { type: "text/markdown" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1469,14 +1503,14 @@ on("btnHandoff", "click", async () => {
       a.download = `engram-handoff-${Date.now()}.md`;
       a.click();
       URL.revokeObjectURL(url);
-      statusBar.textContent = "âœ“ Handoff downloaded (clipboard blocked)";
+      statusBar.textContent = "✓ Handoff downloaded (clipboard blocked)";
       statusBar.style.color = "#22c55e";
     }
     clearStatusBarLater(statusBar.textContent, 4000);
     return;
   }
 
-  // No local scan â€” try worker fallback
+  // No local scan — try worker fallback
   console.log("[Engram] no local scan results, trying worker handoff");
   const res = await runtimeSendMessage({ type: "ENGRAM_GENERATE_HANDOFF" });
   if (!res) {
@@ -1490,17 +1524,17 @@ on("btnHandoff", "click", async () => {
   }
   const prompt = res.continuationPrompt || res.handoff?.continuationPrompt;
   if (!prompt) {
-    statusBar.textContent = "No handoff data â€” scan first";
+    statusBar.textContent = "No handoff data — scan first";
     clearStatusBarLater(statusBar.textContent, 3000);
     return;
   }
   try {
     await navigator.clipboard.writeText(prompt);
-    statusBar.textContent = "âœ“ Handoff copied to clipboard!";
+    statusBar.textContent = "✓ Handoff copied to clipboard!";
     statusBar.style.color = "#22c55e";
     clearStatusBarLater(statusBar.textContent, 3000);
   } catch (e) {
-    statusBar.textContent = "Clipboard blocked â€” see console";
+    statusBar.textContent = "Clipboard blocked — see console";
     statusBar.style.color = "#ef4444";
   }
 });
@@ -1527,7 +1561,7 @@ on("btnExportPackage", "click", async () => {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    statusBar.textContent = "âœ“ Migration package downloaded";
+    statusBar.textContent = "✓ Migration package downloaded";
     statusBar.style.color = "#22c55e";
     clearStatusBarLater(statusBar.textContent, 4000);
   } catch (e) {
@@ -1568,7 +1602,7 @@ on("btnExportWithFiles", "click", async () => {
   });
 
   if (userFiles.length === 0) {
-    statusBar.textContent = "No files selected â€” exporting package without attachments";
+    statusBar.textContent = "No files selected — exporting package without attachments";
     statusBar.style.color = "";
   } else {
     statusBar.textContent = "Building migration package...";
@@ -1583,7 +1617,7 @@ on("btnExportWithFiles", "click", async () => {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    statusBar.textContent = "âœ“ Migration package downloaded";
+    statusBar.textContent = "✓ Migration package downloaded";
     statusBar.style.color = "#22c55e";
     clearStatusBarLater(statusBar.textContent, 4000);
   } catch (e) {
@@ -1623,7 +1657,7 @@ on("btnClearSettings", "click", () => {
   runtimeSendMessage({ type: "ENGRAM_RESET_ALL" }).then(() => showState("idle"));
 });
 
-// Widget toggle â€” saves immediately on click
+// Widget toggle — saves immediately on click
 on("btnWidgetToggle", "click", async () => {
   engramSettings.showMiniHealthWidget = !engramSettings.showMiniHealthWidget;
   const btn = $("btnWidgetToggle");
@@ -1634,6 +1668,16 @@ on("btnWidgetToggle", "click", async () => {
   }
   try { await storageSet({ engramSettings }); } catch (_) {}
 });
+
+// LinkedIn widget toggles (Settings + main LinkedIn view) � saved immediately
+async function toggleLinkedInWidget() {
+  engramSettings.linkedInWidgetEnabled = engramSettings.linkedInWidgetEnabled !== false ? false : true;
+  syncLinkedInToggles();
+  try { await storageSet({ engramSettings }); } catch (_) {}
+}
+
+on("btnLinkedInWidgetToggle",     "click", toggleLinkedInWidget);
+on("btnLinkedInWidgetToggleMain", "click", toggleLinkedInWidget);
 
 // Export Chat
 on("btnExport", "click", () => {
@@ -1652,7 +1696,7 @@ on("btnExport", "click", () => {
   URL.revokeObjectURL(url);
 
   const statusBar = $("statusBar");
-  statusBar.textContent = "âœ“ Chat exported";
+  statusBar.textContent = "✓ Chat exported";
   statusBar.style.color = "#22c55e";
   clearStatusBarLater(statusBar.textContent, 3000, true);
 });
@@ -1686,6 +1730,247 @@ on("btnModeCustom", "click", () => {
 
 // Save settings
 on("btnSaveSettings", "click", saveSettings);
+
+// -- LinkedIn helpers --------------------------------------------------------
+
+async function refreshLinkedInCounts() {
+  try {
+    const stored = await storageGet("engramSavedJobs");
+    const jobs = (stored && stored.engramSavedJobs) || [];
+    const savedEl  = $("jobSavedCount");
+    const queuedEl = $("jobQueuedCount");
+    if (savedEl)  savedEl.textContent  = jobs.length;
+    if (queuedEl) queuedEl.textContent = jobs.filter(function(j) { return j.queued !== false; }).length;
+  } catch (_) {}
+}
+
+// -- LinkedIn Job Source -----------------------------------------------------
+
+function _fillPopupAvatar(avEl, job) {
+  avEl.innerHTML = "";
+  if (job && job.companyLogoUrl) {
+    const img = document.createElement("img");
+    img.src = job.companyLogoUrl;
+    Object.assign(img.style, { width: "100%", height: "100%", objectFit: "cover" });
+    img.onerror = function () {
+      this.remove();
+      avEl.textContent = job.companyInitials || (job.company || "?").slice(0, 1).toUpperCase();
+    };
+    avEl.appendChild(img);
+  } else if (job) {
+    avEl.textContent = job.companyInitials || (job.company || "?").slice(0, 1).toUpperCase();
+  }
+}
+
+async function loadLinkedInView() {
+  try {
+    const stored = await storageGet("engramSavedJobs");
+    const jobs = (stored && stored.engramSavedJobs) || [];
+    const queued = jobs.filter(function(j) { return j.queued !== false; }).length;
+    const savedEl   = $("jobSavedCount");
+    const queuedEl  = $("jobQueuedCount");
+    const hintEl    = $("jobQueueHint");
+    const buildBtn  = $("btnBuildJobPackage");
+    if (savedEl)  savedEl.textContent  = jobs.length;
+    if (queuedEl) queuedEl.textContent = queued;
+    if (hintEl) {
+      if (jobs.length === 0) {
+        hintEl.textContent = "Save jobs using the Engram widget on LinkedIn pages.";
+      } else if (queued === 0) {
+        hintEl.textContent = "Open the archive to select jobs for your package.";
+      } else {
+        hintEl.textContent = queued + " job" + (queued === 1 ? "" : "s") + " queued for your AI package.";
+      }
+    }
+    if (buildBtn) buildBtn.disabled = jobs.length === 0;
+
+    try {
+      const tabs = await tabsQuery({ active: true, currentWindow: true });
+      if (tabs[0]) {
+        const res = await tabsSendMessage(tabs[0].id, { type: "ENGRAM_GET_CURRENT_JOB" });
+        const job = res && res.job && res.job.title ? res.job : null;
+
+        const previewRow = $("jobPreviewRow");
+        const infoEl     = $("currentJobInfo");
+
+        if (job) {
+          const avEl    = $("jobPrevAvatar");
+          const titleEl = $("jobPrevTitle");
+          const metaEl  = $("jobPrevMeta");
+          if (avEl)    _fillPopupAvatar(avEl, job);
+          if (titleEl) titleEl.textContent = job.title;
+          if (metaEl)  metaEl.textContent  = [
+            job.company,
+            (job.remoteStatus && job.remoteStatus !== "Not specified") ? job.remoteStatus : "",
+          ].filter(Boolean).join(" \xb7 ");
+          if (previewRow) previewRow.style.display = "";
+          if (infoEl)     infoEl.style.display     = "none";
+        } else {
+          if (previewRow) previewRow.style.display = "none";
+          if (infoEl) {
+            infoEl.style.display = "";
+            infoEl.textContent   = "See Engram widget on the page";
+            infoEl.classList.add("no-job");
+          }
+        }
+      }
+    } catch (_) {}
+
+    syncLinkedInToggles();
+  } catch (_) {}
+}
+
+function buildMultiJobPrompt(jobs) {
+  const count   = jobs.length;
+  const jobList = jobs.map(function (j, i) {
+    const jobUrl = j.canonicalUrl || j.url || "Unknown";
+    return [
+      "### Job " + (i + 1) + ": " + (j.title || "Unknown") + " at " + (j.company || "Unknown"),
+      "",
+      "- **Location:** " + (j.location || "Unknown"),
+      "- **Remote Status:** " + (j.remoteStatus || "Not specified"),
+      "- **Salary:** " + (j.salary || "Not disclosed"),
+      "- **URL:** " + jobUrl,
+      "",
+      "**Description:**",
+      "",
+      j.description ? j.description.slice(0, 2000) : "No description captured.",
+    ].join("\n");
+  }).join("\n\n---\n\n");
+
+  return "# LinkedIn Job Search Analysis\n\n" +
+    "I collected these LinkedIn jobs. Please compare the selected roles, identify strongest fit, " +
+    "check red flags, map requirements to my skills/projects, suggest resume positioning, " +
+    "and prepare application next steps.\n\n" +
+    "Specifically provide:\n\n" +
+    "1. **Ranking by overall fit** � Which roles are the strongest candidates?\n" +
+    "2. **Red flags** � Any signs of scam, misleading requirements, or unrealistic expectations?\n" +
+    "3. **Requirements mapping** � What skills and experience do these roles require?\n" +
+    "4. **Resume positioning** � How should I position myself for each role?\n" +
+    "5. **Application next steps** � Which jobs to prioritize and what to research before applying?\n" +
+    "6. **Questions to ask recruiters** � What should I clarify for each role?\n\n" +
+    "---\n\n" + jobList + "\n\n---\n" +
+    "_Generated by Engram \xb7 " + new Date().toLocaleString() + "_\n";
+}
+
+function buildJobsMd(jobs) {
+  var lines = [
+    "# Saved Jobs", "",
+    "_" + jobs.length + " job(s) \xb7 Generated by Engram \xb7 " + new Date().toISOString() + "_",
+    "",
+  ];
+  jobs.forEach(function (j, i) {
+    lines.push("## " + (i + 1) + ". " + escapeHtml(j.title || "Unknown") + " � " + escapeHtml(j.company || "Unknown"));
+    lines.push("");
+    if (j.location)     lines.push("- **Location:** " + j.location);
+    if (j.remoteStatus) lines.push("- **Remote:** " + j.remoteStatus);
+    if (j.salary)       lines.push("- **Salary:** " + j.salary);
+    var jobUrl = j.canonicalUrl || j.url;
+    if (jobUrl)         lines.push("- **URL:** " + jobUrl);
+    if (j.description) {
+      lines.push("", "**Description:**", "", j.description.slice(0, 2000));
+    }
+    lines.push("", "---", "");
+  });
+  return lines.join("\n");
+}
+
+function buildJobSearchHandoff(jobs) {
+  var summary = jobs.map(function (j, i) {
+    var jobUrl = j.canonicalUrl || j.url || "";
+    return (i + 1) + ". **" + (j.title || "Unknown") + "** at **" + (j.company || "Unknown") +
+      "** � " + (j.location || "Unknown") + " (" + (j.remoteStatus || "N/A") + ")" +
+      (jobUrl ? " � " + jobUrl : "");
+  }).join("\n");
+
+  return "# Job Search Handoff\n\n" +
+    "> Generated by Engram. Use this to continue your job search analysis in a new AI chat.\n\n" +
+    "## Saved Jobs Summary\n\n" + summary + "\n\n" +
+    "## How to Use\n\n" +
+    "1. Start a new chat in ChatGPT or Claude.ai.\n" +
+    "2. Paste the prompt from `ai-prompt.md` to begin the analysis.\n" +
+    "3. Reference `jobs.md` for full job details.\n" +
+    "4. Use `jobs.json` if you need machine-readable data.\n\n" +
+    "_Generated: " + new Date().toISOString() + "_\n";
+}
+
+async function buildJobPackage() {
+  var bar = $("jobStatusBar");
+  try {
+    var stored  = await storageGet("engramSavedJobs");
+    var allJobs = (stored && stored.engramSavedJobs) || [];
+    var jobs    = allJobs.filter(function(j) { return j.queued !== false; });
+
+    if (!allJobs.length) {
+      if (bar) { bar.textContent = "No saved jobs. Use the widget on LinkedIn pages."; bar.style.color = ""; }
+      return;
+    }
+
+    if (!jobs.length) {
+      if (bar) {
+        bar.textContent = "Select at least one job in the archive for the package.";
+        bar.style.color = "#f59e0b";
+        clearStatusBarLater(bar.textContent, 4000, true);
+      }
+      return;
+    }
+
+    if (bar) { bar.textContent = "Building package�"; bar.style.color = ""; }
+
+    var datestamp = new Date().toISOString().slice(0, 10);
+    var zip = new window.ZipWriter();
+    zip.addText("job-search-handoff.md", buildJobSearchHandoff(jobs));
+    zip.addText("jobs.md",               buildJobsMd(jobs));
+    zip.addText("jobs.json",             JSON.stringify(jobs, null, 2));
+    zip.addText("ai-prompt.md",          buildMultiJobPrompt(jobs));
+
+    var blob = zip.build();
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement("a");
+    a.href     = url;
+    a.download = "engram-job-package-" + datestamp + ".zip";
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (bar) {
+      bar.textContent = "? Job package downloaded";
+      bar.style.color = "#22c55e";
+      clearStatusBarLater(bar.textContent, 4000, true);
+    }
+  } catch (e) {
+    console.error("[Engram] job package build failed", e);
+    if (bar) { bar.textContent = "Package build failed"; bar.style.color = "#ef4444"; }
+  }
+}
+
+async function copyJobPrompt() {
+  var bar = $("jobStatusBar");
+  try {
+    var stored = await storageGet("engramSavedJobs");
+    var jobs   = (stored && stored.engramSavedJobs) || [];
+
+    if (!jobs.length) {
+      if (bar) { bar.textContent = "No saved jobs yet."; bar.style.color = ""; }
+      return;
+    }
+
+    await navigator.clipboard.writeText(buildMultiJobPrompt(jobs));
+    if (bar) {
+      bar.textContent = "? AI prompt copied!";
+      bar.style.color = "#22c55e";
+      clearStatusBarLater(bar.textContent, 3000, true);
+    }
+  } catch (e) {
+    if (bar) { bar.textContent = "Copy failed"; bar.style.color = "#ef4444"; }
+  }
+}
+
+on("btnBuildJobPackage", "click", buildJobPackage);
+on("btnCopyJobPrompt",   "click", copyJobPrompt);
+
+on("btnViewArchive", "click", () => {
+  _api.tabs.create({ url: _api.runtime.getURL("jobs/archive.html") });
+});
 
 // Init
 installImageFallbacks();

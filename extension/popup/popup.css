@@ -375,6 +375,10 @@ body {
   color: var(--text-muted);
 }
 
+.btn-ghost.btn-block {
+  flex: none;
+}
+
 .btn-ghost:hover:not(:disabled) {
   border-color: rgba(30, 144, 255, 0.42);
   background: rgba(30, 144, 255, 0.10);
@@ -397,6 +401,29 @@ body {
 
 .btn-block {
   width: 100%;
+}
+
+.btn-outlined {
+  width: 100%;
+  border-color: rgba(168, 129, 254, 0.50);
+  background: rgba(168, 129, 254, 0.08);
+  color: var(--accent);
+}
+
+.btn-outlined:hover:not(:disabled) {
+  border-color: rgba(168, 129, 254, 0.72);
+  background: rgba(168, 129, 254, 0.15);
+  color: #ffffff;
+  opacity: 1;
+}
+
+.job-action-hint {
+  color: var(--text-dim);
+  font-size: 10.5px;
+  line-height: 1.45;
+  text-align: center;
+  padding: 0 4px;
+  min-height: 14px;
 }
 
 .action-buttons {
@@ -799,3 +826,288 @@ body {
 .health-action.action-soon { color: #fbbf24; }
 .health-action.action-handoff { color: #fb923c; }
 .health-action.action-move { color: #fca5a5; }
+
+/* LinkedIn Job Source Panel */
+
+.job-source-card {
+  overflow: hidden;
+  border: 1px solid rgba(10, 102, 194, 0.30);
+  border-radius: var(--card-radius);
+  background: rgba(10, 102, 194, 0.06);
+}
+
+.job-source-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(10, 102, 194, 0.15);
+}
+
+.job-source-icon {
+  color: #0a66c2;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.job-source-title {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.job-current-info {
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  border-bottom: 1px solid rgba(10, 102, 194, 0.12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-current-info.no-job {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Job preview row — shown when a job is active on the tab */
+.job-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.job-prev-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: rgba(168, 129, 254, 0.12);
+  border: 1px solid rgba(168, 129, 254, 0.18);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.job-prev-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.job-prev-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.job-prev-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.job-prev-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+.job-stats-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.job-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+}
+
+.job-stat + .job-stat {
+  border-left: 1px solid rgba(10, 102, 194, 0.15);
+}
+
+.job-stat-value {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.job-stat-label {
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  line-height: 1;
+}
+
+/* Job Archive View */
+
+.archive-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive-view-title {
+  flex: 1;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.archive-view-count {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.archive-controls {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-text-link {
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.btn-text-link:hover {
+  color: var(--accent);
+}
+
+.archive-list-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+}
+
+.archive-job-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.archive-job-row:last-child {
+  border-bottom: none;
+}
+
+.archive-checkbox {
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+}
+
+.archive-job-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.archive-job-title {
+  font-size: 11px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.archive-job-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+.archive-delete-btn {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.archive-delete-btn:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.10);
+}
+
+.archive-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* LinkedIn widget toggle row inside job-source-card */
+
+.job-widget-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(10, 102, 194, 0.15);
+}
+
+/* LinkedIn badge in settings */
+
+.settings-linkedin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: #0a66c2;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
