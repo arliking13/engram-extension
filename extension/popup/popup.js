@@ -72,6 +72,9 @@ function storageSet(obj) {
   return new Promise((resolve) => { chrome.storage.local.set(obj, resolve); });
 }
 
+const ACTIVE_SCAN_SESSIONS_KEY = "engram:runtime:activeScanSessions";
+const EXPORT_FRESH_SCAN_TIMEOUT_MS = 12000;
+
 // TODO: Replace YOUR-VERCEL-APP with the real deployed Vercel URL before Demo Day.
 const DEMO_HANDOFF_ENDPOINT = "https://YOUR-VERCEL-APP.vercel.app/api/handoff";
 const ENGRAM_SITE_URL = "https://engram-blush-tau.vercel.app/";
@@ -215,7 +218,7 @@ async function saveSettings() {
 }
 
 // AI handoff via Vercel proxy — fails safely back to local export
-async function tryAIHandoff() {
+async function tryAIHandoff(sourceScanResult = scanResults) {
   let endpoint;
 
   if (engramSettings.mode === "demo") {
@@ -230,7 +233,7 @@ async function tryAIHandoff() {
   }
 
   try {
-    const messages = (scanResults?.messages || []).map(m => ({
+    const messages = (sourceScanResult?.messages || []).map(m => ({
       role: m.role,
       text: m.text
     }));
@@ -275,6 +278,9 @@ let lastHealthData = null;
 let statusClearTimer = null;
 let lastHealthSnapshotSignature = "";
 let activePlatform = "other";
+let activeTabId = null;
+let activeSnapshotKey = null;      // snapshotKey for the currently active tab
+let _lastKnownSnapshotKey = null;  // detect SPA navigation between popup polls
 
 function clearStatusBarLater(expectedText, ms = 3000, resetColor = false) {
   if (statusClearTimer) clearTimeout(statusClearTimer);
@@ -327,16 +333,33 @@ function getMainPopupState() {
   return "idle";
 }
 
-function renderIdle(message = "Scan to analyze this chat", disabled = false) {
+function renderIdle(message = "Scan required", disabled = false, detail = "Scan this chat to start live tracking.") {
   console.log("[Engram] rendering idle state", message);
   lastRenderSource = "idle";
   showState("idle");
+  if (disabled && detail === "Scan this chat to start live tracking.") detail = "";
 
   const hint = document.querySelector("#idleView .idle-hint");
   const scanButton = $("btnScan");
 
   if (hint) hint.textContent = message;
-  if (scanButton) scanButton.disabled = disabled;
+  if (hint) {
+    let detailEl = $("idleScanDetail");
+    if (!detailEl && hint.parentElement) {
+      detailEl = document.createElement("div");
+      detailEl.id = "idleScanDetail";
+      detailEl.className = "idle-detail";
+      hint.parentElement.insertBefore(detailEl, hint.nextSibling);
+    }
+    if (detailEl) {
+      detailEl.textContent = detail || "";
+      detailEl.style.display = detail ? "" : "none";
+    }
+  }
+  if (scanButton) {
+    scanButton.disabled = disabled;
+    scanButton.textContent = "Scan";
+  }
 }
 
 function renderError(message) {
@@ -355,6 +378,70 @@ function renderError(message) {
   renderIdle(message || "State unavailable. Scan Chat is still available.");
 }
 
+
+function getScanResultCounts(sr) {
+  if (!sr) {
+    return { userCount: 0, aiCount: 0, total: 0, codeCount: 0 };
+  }
+
+  const messages = Array.isArray(sr.messages) ? sr.messages : [];
+  const displayMessages = Array.isArray(sr.displayMessages) ? sr.displayMessages : [];
+  const rawMessages = Array.isArray(sr.rawMessages) ? sr.rawMessages : [];
+
+  const bestMessages =
+    messages.length ? messages :
+    displayMessages.length ? displayMessages :
+    rawMessages.length ? rawMessages :
+    [];
+
+  const roleOf = (m) =>
+    String(m?.role || m?.author?.role || m?.sender || m?.type || "").toLowerCase();
+
+  const userFromMessages = bestMessages.filter((m) =>
+    /user|human/.test(roleOf(m))
+  ).length;
+
+  const aiFromMessages = bestMessages.filter((m) =>
+    /assistant|ai|model|claude|chatgpt/.test(roleOf(m))
+  ).length;
+
+  const codeFromMessages = bestMessages
+    .flatMap((m) => Array.isArray(m?.codeBlocks) ? m.codeBlocks : [])
+    .length;
+
+  const total =
+    Number(sr.total ?? sr.stats?.total ?? sr.messageCount ?? sr.displayMessageCount) ||
+    bestMessages.length ||
+    userFromMessages + aiFromMessages ||
+    0;
+
+  const userCount =
+    Number(sr.userCount ?? sr.stats?.userCount) ||
+    userFromMessages ||
+    0;
+
+  const aiCount =
+    Number(sr.aiCount ?? sr.assistantCount ?? sr.stats?.aiCount) ||
+    aiFromMessages ||
+    Math.max(0, total - userCount) ||
+    0;
+
+  const codeCount =
+    Number(sr.codeCount ?? sr.stats?.codeCount) ||
+    codeFromMessages ||
+    0;
+
+  return { userCount, aiCount, total, codeCount };
+}
+
+function markScanFreshness(result, freshnessState) {
+  if (!result) return result;
+  result.freshnessState = freshnessState;
+  result.isCachedBaseline = false;
+  result.needsRefresh = false;
+  return result;
+}
+
 function renderDone(source = "local") {
   if (!scanResults) return;
 
@@ -362,11 +449,39 @@ function renderDone(source = "local") {
   lastRenderSource = source;
   showState("done");
 
-  $("userCount").textContent = scanResults.userCount || 0;
-  $("aiCount").textContent = scanResults.aiCount || 0;
-  $("totalCount").textContent = scanResults.total || 0;
-  $("codeCount").textContent = scanResults.codeCount || 0;
+  const counts = getScanResultCounts(scanResults);
+
+  scanResults.userCount = counts.userCount;
+  scanResults.aiCount = counts.aiCount;
+  scanResults.total = counts.total;
+  scanResults.codeCount = counts.codeCount;
+
+  console.log("[Engram][Popup] render counts", {
+    source,
+    counts,
+    rawTopLevel: {
+      userCount: scanResults.userCount,
+      aiCount: scanResults.aiCount,
+      total: scanResults.total,
+      codeCount: scanResults.codeCount,
+    },
+    stats: scanResults.stats || null,
+    messages: Array.isArray(scanResults.messages) ? scanResults.messages.length : 0,
+    displayMessages: Array.isArray(scanResults.displayMessages) ? scanResults.displayMessages.length : 0,
+    rawMessages: Array.isArray(scanResults.rawMessages) ? scanResults.rawMessages.length : 0,
+  });
+
+  $("userCount").textContent = counts.userCount;
+  $("aiCount").textContent = counts.aiCount;
+  $("totalCount").textContent = counts.total;
+  $("codeCount").textContent = counts.codeCount;
   $("btnScan").disabled = false;
+  const _rescanBtn = $("btnRescan");
+  if (_rescanBtn) {
+    _rescanBtn.disabled = false;
+    _rescanBtn.textContent = "Rescan";
+    _rescanBtn.title = "Rescan this chat for updated message count";
+  }
 
   if (scanResults._fromCachedSnapshot && lastHealthData) {
     updateGauge(lastHealthData.score);
@@ -392,57 +507,11 @@ function keepLocalScanResult() {
   return true;
 }
 function renderFromCache(snapshot) {
-  if (!snapshot) return false;
-
-  console.log("[Engram][Popup] hydrating from cached snapshot", {
-    snapshotKey: snapshot.snapshotKey,
-    healthScore: snapshot.healthScore,
-    total: snapshot.stats && snapshot.stats.total,
-    platform: snapshot.platform,
-    scannedAt: snapshot.scannedAt,
+  console.log("[Engram][Popup] cached snapshot ignored for visible popup state", {
+    snapshotKey: snapshot?.snapshotKey || null,
+    platform: snapshot?.platform || null,
   });
-
-  scanResults = {
-    _fromCachedSnapshot: true,
-    chatId: snapshot.chatId || null,
-    url: snapshot.sourceUrl || "",
-    sourceTitle: snapshot.sourceTitle || "",
-    sourcePlatform: snapshot.platform || "unknown",
-    platform: snapshot.platform || "unknown",
-    total: (snapshot.stats && snapshot.stats.total) || 0,
-    userCount: (snapshot.stats && snapshot.stats.userCount) || 0,
-    aiCount: (snapshot.stats && snapshot.stats.aiCount) || 0,
-    codeCount: (snapshot.stats && snapshot.stats.codeCount) || 0,
-    totalChars: (snapshot.stats && snapshot.stats.totalChars) || 0,
-    messages: [],
-  };
-
-  lastHealthData = {
-    score: snapshot.healthScore,
-    health: snapshot.healthScore,
-    healthLabel: snapshot.healthLabel || snapshot.statusLabel || getHealthDisplay(snapshot.healthScore).label,
-    statusLabel: snapshot.statusLabel || snapshot.healthLabel || getHealthDisplay(snapshot.healthScore).label,
-    migrationRisk: snapshot.migrationRisk || "",
-    migrationRiskClass: getMigrationRiskClass(snapshot.migrationRisk),
-    browserLoad: snapshot.browserLoad || "",
-    action: snapshot.action || "",
-    reasons: snapshot.reasons || [],
-    pressure: {},
-  };
-
-  hasLocalScanResult = true;
-  updateChatTitleEl(snapshot.sourceTitle || null);
-
-  const ageMs = Date.now() - (snapshot.scannedAt || 0);
-  renderDone("cached-snapshot");
-
-  var statusBar = $("statusBar");
-  if (statusBar && ageMs > 30 * 60 * 1000) {
-    statusBar.textContent = "Showing data from " + Math.round(ageMs / 60000) + " min ago";
-    statusBar.style.color = "";
-  }
-
-  return true;
+  return false;
 }
 
 // Update speedometer gauge
@@ -565,15 +634,25 @@ async function persistScanResult(result) {
   const platform = getPlatformId(result);
   if (platform !== "chatgpt" && platform !== "claude") return;
 
-  const snapshotKey = getHealthSnapshotKey(result);
+  // Use popup's computed snapshotKey (from URL) when chatId is unknown — fixes Claude's broken chatId
+  let snapshotKey, definiteChatId;
+  if (activeSnapshotKey && (result.chatId === "unknown" || !result.chatId)) {
+    snapshotKey = activeSnapshotKey;
+    definiteChatId = snapshotKey.startsWith("chat:") ? snapshotKey.slice(5) : (result.chatId || "unknown");
+  } else {
+    snapshotKey = getHealthSnapshotKey(result);
+    definiteChatId = result.chatId || "unknown";
+  }
   const obj = {
     platform,
-    chatId:      result.chatId    || "unknown",
+    chatId:      definiteChatId,
     snapshotKey,
     sourceUrl:   result.url       || "",
     sourceTitle: result.sourceTitle || "",
     scannedAt:   result.scannedAt || Date.now(),
     extractionStrategy: result.extractionStrategy || "",
+    baselineEstablished: true,
+    baselineSource:      "manual_scan",
     stats: {
       total:      result.total      || msgs.length,
       userCount:  result.userCount  || 0,
@@ -591,18 +670,29 @@ async function persistScanResult(result) {
     obj.rawMessages = result.rawMessages;
   }
 
+  // Write to snapshotsByKey so live observer can verify baseline before persisting
+  const byKeyKey = platform === "chatgpt" ? "engram:chatgpt:snapshotsByKey" : "engram:claude:snapshotsByKey";
+  let snapshotsByKey = {};
+  try {
+    const stored = await storageGet(byKeyKey);
+    snapshotsByKey = (stored && stored[byKeyKey]) || {};
+  } catch (_) {}
+  snapshotsByKey[snapshotKey] = obj;
+
   let writes;
   if (platform === "chatgpt") {
     writes = {
       "engramChatgptLatestScanResult":        obj,
       "engramChatgptLatestSnapshot":          obj,
       "engram:chatgpt:conversationSnapshot":  obj,
+      [byKeyKey]:                             snapshotsByKey,
     };
   } else {
     writes = {
       "engramClaudeLatestScanResult":       obj,
       "engramClaudeLatestSnapshot":         obj,
       "engram:claude:conversationSnapshot": obj,
+      [byKeyKey]:                           snapshotsByKey,
     };
   }
 
@@ -612,7 +702,8 @@ async function persistScanResult(result) {
       "[Engram] scan result persisted",
       `platform=${platform}`,
       `chatId=${obj.chatId}`,
-      `messages=${msgs.length}`
+      `messages=${msgs.length}`,
+      "baselineEstablished=true"
     );
   } catch (e) {
     console.warn("[Engram] scan result persist failed", e);
@@ -660,6 +751,13 @@ function findCachedSnapshot(url, byChat, lastSnap, platform = detectPlatformFrom
 function getHealthSnapshotKey(sr) {
   if (sr?.chatId && sr.chatId !== "unknown") return "chat:" + sr.chatId;
   const normalizedUrl = normalizeHealthSnapshotUrl(sr?.url || "");
+  return normalizedUrl ? "url:" + normalizedUrl : "chat:unknown";
+}
+
+function getSnapshotKeyFromUrl(url = "") {
+  const chatIdMatch = String(url || "").match(/[/](?:c|chat)[/]([a-z0-9-]+)/i);
+  if (chatIdMatch) return "chat:" + chatIdMatch[1];
+  const normalizedUrl = normalizeHealthSnapshotUrl(url);
   return normalizedUrl ? "url:" + normalizedUrl : "chat:unknown";
 }
 
@@ -1082,26 +1180,222 @@ function extractTechnicalSignals(allText) {
   return { filePaths, gitActivity, errorLines, todoLines };
 }
 
+function normalizeExportRole(role) {
+  const raw = String(role || "").toLowerCase();
+  if (/user|human/.test(raw)) return "user";
+  if (/assistant|ai|model|claude|chatgpt/.test(raw)) return "assistant";
+  if (/system|tool|developer/.test(raw)) return raw.includes("developer") ? "system" : raw;
+  return raw || "unknown";
+}
+
+function normalizeExportText(text) {
+  return String(text || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+function collectExportAttachments(message) {
+  const attachments = [];
+  const sources = [
+    message?.attachments,
+    message?.files,
+    message?.images,
+    message?.uploads,
+    message?.metadata?.attachments,
+    message?.metadata?.files,
+  ];
+
+  sources.forEach((source) => {
+    if (!Array.isArray(source)) return;
+    source.forEach((item) => {
+      if (!item) return;
+      if (typeof item === "string") {
+        attachments.push({ type: "file", name: item });
+        return;
+      }
+      attachments.push({
+        type: item.type || item.kind || item.mimeType || item.contentType || "file",
+        name: item.name || item.filename || item.fileName || item.title || "",
+        size: item.size || null,
+      });
+    });
+  });
+
+  const text = [
+    message?.text,
+    message?.rawText,
+    message?.ariaLabel,
+    message?.metadata?.label,
+  ].map(v => String(v || "")).join(" ");
+
+  if (!attachments.length && /attach|upload|file|image|pdf|document/i.test(text)) {
+    attachments.push({ type: /image/i.test(text) ? "image" : "file", name: "" });
+  }
+
+  return attachments;
+}
+
+function attachmentOnlyPlaceholder(role, attachments) {
+  if (role !== "user") return "[Non-text turn captured; content unavailable]";
+  if (!attachments.length) return "[Non-text user turn captured; content unavailable]";
+
+  const first = attachments[0] || {};
+  const type = String(first.type || "").toLowerCase();
+  const name = first.name ? ": " + first.name : "";
+  if (type.includes("image")) return "[Attachment-only user turn: image uploaded" + name + "]";
+  if (type.includes("file") || first.name) return "[Attachment-only user turn: file uploaded" + name + "]";
+  return "[Attachment-only user turn: text unavailable]";
+}
+
+function normalizeExportCodeBlocks(message) {
+  const blocks = Array.isArray(message?.codeBlocks) ? message.codeBlocks : [];
+  return blocks
+    .map((block) => ({
+      language: String(block?.language || "text"),
+      code: String(block?.code || "").trim(),
+    }))
+    .filter((block) => block.code);
+}
+
+function normalizeExportMessages(scanResult = {}) {
+  const sourceMessages = Array.isArray(scanResult.messages) && scanResult.messages.length
+    ? scanResult.messages
+    : Array.isArray(scanResult.displayMessages) && scanResult.displayMessages.length
+      ? scanResult.displayMessages
+      : Array.isArray(scanResult.rawMessages) && scanResult.rawMessages.length
+        ? scanResult.rawMessages
+        : [];
+
+  const normalized = [];
+  let previousSignature = "";
+
+  sourceMessages.forEach((message, sourceIndex) => {
+    const role = normalizeExportRole(message?.role || message?.author?.role || message?.sender || message?.type);
+    const attachments = collectExportAttachments(message);
+    let text = normalizeExportText(message?.text ?? message?.content ?? message?.rawText ?? "");
+    const codeBlocks = normalizeExportCodeBlocks(message);
+
+    if (!text && (attachments.length || role === "user" || role === "unknown")) {
+      text = attachmentOnlyPlaceholder(role, attachments);
+    }
+    if (!text && !codeBlocks.length) return;
+
+    const attachmentSignature = attachments.map(a => [a.type || "", a.name || ""].join(":")).join(",");
+    const codeSignature = codeBlocks.map(c => [c.language, c.code].join(":")).join("|");
+    const signature = [
+      role,
+      text.replace(/\s+/g, " ").trim(),
+      attachmentSignature,
+      codeSignature,
+    ].join("|");
+
+    if (signature && signature === previousSignature) return;
+    previousSignature = signature;
+
+    normalized.push({
+      ...message,
+      role,
+      text,
+      attachments,
+      codeBlocks,
+      sourceIndex,
+      exportIndex: normalized.length + 1,
+    });
+  });
+
+  return normalized;
+}
+
+function getExportStats(messages) {
+  const totalChars = messages.reduce((sum, message) => sum + String(message.text || "").length, 0);
+  return {
+    userCount: messages.filter(m => m.role === "user").length,
+    aiCount: messages.filter(m => m.role === "assistant").length,
+    systemCount: messages.filter(m => m.role === "system").length,
+    unknownCount: messages.filter(m => !["user", "assistant", "system"].includes(m.role)).length,
+    total: messages.length,
+    codeCount: messages.reduce((sum, message) => sum + (message.codeBlocks || []).length, 0),
+    totalChars,
+  };
+}
+
+function withCanonicalExportMessages(scanResult = {}) {
+  const messages = normalizeExportMessages(scanResult);
+  const stats = getExportStats(messages);
+  return {
+    ...scanResult,
+    messages,
+    exportStats: stats,
+    userCount: stats.userCount,
+    aiCount: stats.aiCount,
+    total: stats.total,
+    codeCount: stats.codeCount,
+    totalChars: stats.totalChars,
+  };
+}
+
+function markdownFence(content, language = "text") {
+  const text = String(content || "");
+  const backtickRuns = text.match(/`+/g) || [];
+  const longest = backtickRuns.reduce((max, run) => Math.max(max, run.length), 0);
+  const fence = "`".repeat(Math.max(4, longest + 1));
+  return fence + language + "\n" + text + "\n" + fence;
+}
+
+function formatExportMessageBlock(message, headingPrefix = "Message") {
+  const index = String(message.exportIndex || 0).padStart(4, "0");
+  const lines = [
+    "## " + headingPrefix + " " + index,
+    "",
+    "Role: " + message.role,
+    "Index: " + (message.exportIndex || 0),
+  ];
+
+  if (typeof message.sourceIndex === "number") {
+    lines.push("Source index: " + (message.sourceIndex + 1));
+  }
+  if (message.attachments && message.attachments.length) {
+    lines.push("Attachments:");
+    message.attachments.forEach((attachment, i) => {
+      const name = attachment.name ? " - " + attachment.name : "";
+      lines.push("- " + (attachment.type || "file") + name + " (" + (i + 1) + ")");
+    });
+  }
+
+  lines.push("", "Content:", markdownFence(message.text || "", "text"));
+
+  if (message.codeBlocks && message.codeBlocks.length) {
+    lines.push("", "Code blocks:");
+    message.codeBlocks.forEach((block, i) => {
+      lines.push("", "Code block " + (i + 1) + " (" + (block.language || "text") + "):");
+      lines.push(markdownFence(block.code || "", block.language || "text"));
+    });
+  }
+
+  return lines.join("\n");
+}
+
 function generateHandoffMarkdown(sr, hd) {
-  const msgs = sr.messages || [];
+  const exportSr = sr.exportStats ? sr : withCanonicalExportMessages(sr);
+  const msgs = exportSr.messages || [];
+  const stats = exportSr.exportStats || getExportStats(msgs);
   const recentMsgs = msgs.slice(-30);
   const allText = msgs.map(m => m.text || "").join("\n");
 
   const { filePaths, gitActivity, errorLines, todoLines } = extractTechnicalSignals(allText);
 
-  // Recent context
   const contextSection = recentMsgs
-    .filter(m => m.text && m.text.trim().length > 5)
-    .map(m => {
-      const role = m.role === "user" ? "**User**" : "**Assistant**";
-      const text = m.text.length > 1000 ? m.text.slice(0, 1000) + "\n[...truncated]" : m.text;
-      return `${role}: ${text}`;
-    })
-    .join("\n\n---\n\n");
+    .map(m => formatExportMessageBlock({
+      ...m,
+      text: m.text && m.text.length > 1200 ? m.text.slice(0, 1200) + "\n[...truncated]" : m.text,
+    }, "Recent Message"))
+    .join("\n\n");
 
   // Code blocks — last 5, capped at 800 chars each
   const allCode = msgs.flatMap(m => m.codeBlocks || []).filter(c => c.code.length > 30);
-  const codeCountStat = sr.codeCount || 0;
+  const codeCountStat = stats.codeCount || 0;
   let codeSection;
   if (allCode.length === 0 && codeCountStat > 0) {
     codeSection = `_${codeCountStat} code blocks detected, but detailed code block content was not available in the captured scan._`;
@@ -1116,7 +1410,7 @@ function generateHandoffMarkdown(sr, hd) {
   }
 
   const ts = new Date().toISOString();
-  const totalKb = Math.round((sr.totalChars || 0) / 1000);
+  const totalKb = Math.round((stats.totalChars || 0) / 1000);
   const riskStr = hd ? `${hd.score}% — ${hd.migrationRisk} risk` : "—";
 
   const signalsParts = [];
@@ -1132,10 +1426,10 @@ function generateHandoffMarkdown(sr, hd) {
 > It is based on captured chat data. Use it to continue this session in a fresh chat.
 
 ## Source
-- **Platform:** ${getPlatformDisplayName(sr)}
-- **Chat Title:** ${sr.sourceTitle || "Untitled chat"}
-- **Chat ID:** ${sr.chatId || "unknown"}
-- **URL:** ${sr.url || "unknown"}
+- **Platform:** ${getPlatformDisplayName(exportSr)}
+- **Chat Title:** ${exportSr.sourceTitle || "Untitled chat"}
+- **Chat ID:** ${exportSr.chatId || "unknown"}
+- **URL:** ${exportSr.url || "unknown"}
 - **Generated:** ${ts}
 
 ## Chat Health at Migration
@@ -1146,12 +1440,14 @@ ${hd?.reasons?.length ? "- **Reasons:**\n" + hd.reasons.map(r => `  - ${r}`).joi
 - **Recommendation:** ${hd?.action ?? "—"}
 
 ## Captured Stats
-- User messages: ${sr.userCount || 0}
-- AI messages: ${sr.aiCount || 0}
-- Total messages: ${sr.total || 0}
-- Code blocks: ${sr.codeCount || 0}
+- User messages: ${stats.userCount || 0}
+- AI messages: ${stats.aiCount || 0}
+- System messages: ${stats.systemCount || 0}
+- Unknown-role messages: ${stats.unknownCount || 0}
+- Total messages: ${stats.total || 0}
+- Code blocks: ${stats.codeCount || 0}
 - Total text: ~${totalKb}k characters
-- Scan duration: ${sr.scanDuration != null ? sr.scanDuration + "ms" : "unknown"}
+- Scan duration: ${exportSr.scanDuration != null ? exportSr.scanDuration + "ms" : "unknown"}
 
 ## Recent Context
 _Last ${recentMsgs.length} messages:_
@@ -1174,7 +1470,7 @@ Paste the following at the start of your new chat:
 
 You are continuing an existing AI-assisted work session. Use the handoff below as the source of truth. Preserve the project decisions, current state, constraints, and next actions. Do not assume missing facts. Ask for clarification if something is not present.
 
-**Session context:** ${sr.total || 0} messages captured by Engram before migration. Health at migration: ${riskStr}.
+**Session context:** ${stats.total || 0} messages captured by Engram before migration. Health at migration: ${riskStr}.
 
 Please acknowledge this handoff and confirm what we should focus on first.
 `;
@@ -1183,16 +1479,23 @@ Please acknowledge this handoff and confirm what we should focus on first.
 // ── Migration package generators ────────────────────────────────
 
 function generateFullChatExport(sr) {
-  const msgs = sr.messages || [];
+  const exportSr = sr.exportStats ? sr : withCanonicalExportMessages(sr);
+  const msgs = exportSr.messages || [];
+  const stats = exportSr.exportStats || getExportStats(msgs);
   const ts = new Date().toISOString();
   const lines = [
     "# Full Chat Export",
     "",
-    `- **Source:** ${getPlatformDisplayName(sr)}`,
-    `- **Chat Title:** ${sr.sourceTitle || "Untitled chat"}`,
-    `- **URL:** ${sr.url || "unknown"}`,
+    "_Parse-safe export. Each message uses numbered metadata plus fenced content so pasted handoffs inside user messages cannot be confused with export structure._",
+    "",
+    `- **Source:** ${getPlatformDisplayName(exportSr)}`,
+    `- **Chat Title:** ${exportSr.sourceTitle || "Untitled chat"}`,
+    `- **URL:** ${exportSr.url || "unknown"}`,
     `- **Generated:** ${ts}`,
-    `- **Total messages:** ${sr.total || msgs.length}`,
+    `- **Total messages:** ${stats.total || msgs.length}`,
+    `- **User messages:** ${stats.userCount || 0}`,
+    `- **AI messages:** ${stats.aiCount || 0}`,
+    `- **Code blocks:** ${stats.codeCount || 0}`,
     "",
     "## Messages",
     "",
@@ -1202,9 +1505,8 @@ function generateFullChatExport(sr) {
     lines.push("_No messages captured._");
   } else {
     msgs.forEach((m, i) => {
-      const role = m.role === "user" ? "**User**" : "**Assistant**";
-      lines.push(`${role}: ${m.text || "_empty_"}`);
-      if (i < msgs.length - 1) lines.push("", "---", "");
+      lines.push(formatExportMessageBlock(m));
+      if (i < msgs.length - 1) lines.push("");
     });
   }
 
@@ -1212,7 +1514,8 @@ function generateFullChatExport(sr) {
 }
 
 function generateTechnicalSignalsMd(sr) {
-  const msgs = sr.messages || [];
+  const exportSr = sr.exportStats ? sr : withCanonicalExportMessages(sr);
+  const msgs = exportSr.messages || [];
   const allText = msgs.map(m => m.text || "").join("\n");
   const { filePaths, gitActivity, errorLines, todoLines } = extractTechnicalSignals(allText);
   const ts = new Date().toISOString();
@@ -1223,7 +1526,7 @@ function generateTechnicalSignalsMd(sr) {
     "_Extracted deterministically from captured chat data. Not an AI summary._",
     "",
     `- **Generated:** ${ts}`,
-    `- **Source:** ${sr.url || "unknown"}`,
+    `- **Source:** ${exportSr.url || "unknown"}`,
   ];
 
   if (filePaths.length) {
@@ -1250,6 +1553,8 @@ function generateTechnicalSignalsMd(sr) {
 }
 
 function generateReadme(sr, hd) {
+  const exportSr = sr.exportStats ? sr : withCanonicalExportMessages(sr);
+  const stats = exportSr.exportStats || getExportStats(exportSr.messages || []);
   const ts = new Date().toISOString();
   return `# Engram Migration Package — Start Here
 
@@ -1265,11 +1570,14 @@ This package was generated by **Engram** to help you continue an AI-assisted wor
 
 ## Package summary
 
-- **Source:** ${getPlatformDisplayName(sr)}
-- **Chat Title:** ${sr.sourceTitle || "Untitled chat"}
-- **URL:** ${sr.url || "unknown"}
+- **Source:** ${getPlatformDisplayName(exportSr)}
+- **Chat Title:** ${exportSr.sourceTitle || "Untitled chat"}
+- **URL:** ${exportSr.url || "unknown"}
 - **Chat Health:** ${hd ? hd.score + "%" : "—"} (${hd?.migrationRisk ?? "—"} risk)
-- **Total messages:** ${sr.total || 0}
+- **Total messages:** ${stats.total || 0}
+- **User messages:** ${stats.userCount || 0}
+- **AI messages:** ${stats.aiCount || 0}
+- **Code blocks:** ${stats.codeCount || 0}
 - **Generated:** ${ts}
 
 ## Files in this package
@@ -1288,14 +1596,313 @@ _Generated by Engram — continuity layer for AI-assisted workflows._
 `;
 }
 
+function rejectAfter(ms, message) {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(message)), ms);
+  });
+}
+
+async function getActiveExportContext() {
+  const tabs = await tabsQuery({ active: true, currentWindow: true });
+  const tab = tabs && tabs[0] ? tabs[0] : null;
+  const url = tab?.url || "";
+  const platform = detectPlatformFromUrl(url);
+  const snapshotKey = getSnapshotKeyFromUrl(url);
+  const chatId = snapshotKey.startsWith("chat:") ? snapshotKey.slice(5) : null;
+
+  activeTabId = tab?.id ?? activeTabId;
+  activePlatform = platform;
+  activeSnapshotKey = snapshotKey;
+
+  return {
+    tab,
+    tabId: tab?.id ?? null,
+    url,
+    platform,
+    snapshotKey,
+    chatId,
+  };
+}
+
+function annotateExportScanResult(result, context, source) {
+  const counts = getScanResultCounts(result);
+  return {
+    ...result,
+    platform: result.platform || context.platform,
+    chatId: result.chatId && result.chatId !== "unknown" ? result.chatId : (context.chatId || result.chatId || "unknown"),
+    snapshotKey: context.snapshotKey,
+    url: context.url || result.url || "",
+    activeTabUrl: context.url || "",
+    exportSource: source,
+    userCount: counts.userCount,
+    aiCount: counts.aiCount,
+    total: counts.total,
+    codeCount: counts.codeCount,
+    totalChars: result.totalChars || (Array.isArray(result.messages)
+      ? result.messages.reduce((sum, message) => sum + String(message?.text || "").length, 0)
+      : 0),
+  };
+}
+
+async function getFreshScanResultForExport(context) {
+  if (!context?.tabId || (context.platform !== "chatgpt" && context.platform !== "claude")) {
+    throw new Error("Fresh export scan is only available on ChatGPT or Claude.");
+  }
+
+  console.log("[Engram][Export] fresh scan requested", {
+    platform: context.platform,
+    tabId: context.tabId,
+    chatId: context.chatId,
+    snapshotKey: context.snapshotKey,
+  });
+
+  const response = await Promise.race([
+    tabsSendMessage(context.tabId, { type: "ENGRAM_START_SCAN", mode: "export" }),
+    rejectAfter(EXPORT_FRESH_SCAN_TIMEOUT_MS, "Fresh export scan timed out"),
+  ]);
+
+  if (!response || response.type !== "ENGRAM_SCAN_COMPLETE") {
+    throw new Error(response?.error || "Fresh export scan did not return a scan result.");
+  }
+
+  const resultPlatform = getPlatformId(response);
+  if (resultPlatform !== "unknown" && resultPlatform !== context.platform) {
+    throw new Error("Fresh export scan returned a different platform.");
+  }
+
+  if (
+    context.chatId &&
+    response.chatId &&
+    response.chatId !== "unknown" &&
+    response.chatId !== context.chatId
+  ) {
+    throw new Error("Fresh export scan returned a different chat.");
+  }
+
+  const freshResult = annotateExportScanResult(response, context, "fresh-scan");
+  const stats = getExportStats(normalizeExportMessages(freshResult));
+  console.log("[Engram][Export] fresh scan completed", {
+    platform: context.platform,
+    chatId: freshResult.chatId,
+    snapshotKey: context.snapshotKey,
+    totalMessages: stats.total,
+    userMessages: stats.userCount,
+    aiMessages: stats.aiCount,
+    source: "fresh-scan",
+  });
+
+  return freshResult;
+}
+
+async function getSavedScanResultForExport(context) {
+  const platform = context.platform;
+  if (platform !== "chatgpt" && platform !== "claude") return null;
+
+  const keys = platform === "chatgpt"
+    ? [
+      "engramChatgptLatestScanResult",
+      "engramChatgptLatestSnapshot",
+      "engram:chatgpt:conversationSnapshot",
+      "engram:chatgpt:snapshotsByKey",
+    ]
+    : [
+      "engramClaudeLatestScanResult",
+      "engramClaudeLatestSnapshot",
+      "engram:claude:conversationSnapshot",
+      "engram:claude:snapshotsByKey",
+    ];
+
+  let stored = {};
+  try {
+    stored = await storageGet(keys);
+  } catch (_) {
+    stored = {};
+  }
+
+  const byKey = stored[keys[3]] || {};
+  if (context.snapshotKey && byKey[context.snapshotKey]) {
+    return annotateExportScanResult(byKey[context.snapshotKey], context, "saved-snapshot");
+  }
+
+  const candidates = [stored[keys[0]], stored[keys[1]], stored[keys[2]]].filter(Boolean);
+  const exact = candidates.find((candidate) => {
+    const candidateKey = candidate.snapshotKey || getHealthSnapshotKey({
+      chatId: candidate.chatId,
+      url: candidate.sourceUrl || candidate.url || "",
+    });
+    return candidateKey === context.snapshotKey;
+  });
+  if (exact) return annotateExportScanResult(exact, context, "saved-snapshot");
+
+  const fallback = candidates.find((candidate) => snapshotMatchesPlatform(candidate, platform));
+  return fallback ? annotateExportScanResult(fallback, context, "fallback-snapshot") : null;
+}
+
+function getCanonicalMessageCount(scanResult) {
+  return normalizeExportMessages(scanResult).length;
+}
+
+function getDomMessageCountHint(scanResult) {
+  return Number(
+    scanResult?.renderedNodes ||
+    scanResult?.domMessages ||
+    scanResult?.domMessageCount ||
+    scanResult?.visibleMessages ||
+    scanResult?.displayMessageCount ||
+    0
+  ) || 0;
+}
+
+function assertNotStaleExportSource(scanResult, context, lastSavedSnapshot) {
+  const domMessages = getDomMessageCountHint(scanResult);
+  const canonicalMessages = getCanonicalMessageCount(scanResult);
+  const lastSavedMessages = lastSavedSnapshot ? getCanonicalMessageCount(lastSavedSnapshot) : 0;
+
+  if (domMessages > canonicalMessages) {
+    const details = {
+      domMessages,
+      canonicalMessages,
+      lastSavedMessages,
+      platform: context.platform,
+      chatId: context.chatId,
+      snapshotKey: context.snapshotKey,
+    };
+    console.error("[Engram][Export] ERROR stale export data", details);
+    throw new Error("Package is stale: current chat has newer messages than the export source. Please scan again.");
+  }
+}
+
+function logCanonicalExportSource(source, scanResult, context) {
+  const stats = getExportStats(normalizeExportMessages(scanResult));
+  console.log("[Engram][Export] canonical export source selected", {
+    source,
+    totalMessages: stats.total,
+    userMessages: stats.userCount,
+    aiMessages: stats.aiCount,
+    chatId: scanResult.chatId || context.chatId,
+    snapshotKey: context.snapshotKey,
+  });
+}
+
+async function getCanonicalScanResultForExport(purpose) {
+  const context = await getActiveExportContext();
+  let savedSnapshot = null;
+  let freshScanFailed = null;
+
+  try {
+    savedSnapshot = await getSavedScanResultForExport(context);
+  } catch (_) {
+    savedSnapshot = null;
+  }
+
+  try {
+    const freshResult = await getFreshScanResultForExport(context);
+    assertNotStaleExportSource(freshResult, context, savedSnapshot);
+    const healthData = computeHealthFromScan(freshResult);
+    await persistScanResult(freshResult);
+    saveHealthSnapshot(freshResult, healthData);
+    logCanonicalExportSource("fresh-scan", freshResult, context);
+    return {
+      scanResult: freshResult,
+      healthData,
+      context,
+      source: "fresh-scan",
+      warning: "",
+      purpose,
+    };
+  } catch (error) {
+    freshScanFailed = error;
+    console.warn("[Engram][Export] WARNING fresh scan failed, falling back to saved snapshot", {
+      reason: error?.message || String(error),
+      platform: context.platform,
+      chatId: context.chatId,
+      snapshotKey: context.snapshotKey,
+    });
+  }
+
+  const activeSession = await getActiveScanSession(context.tabId, context.platform, context.snapshotKey);
+  if (activeSessionMatches(activeSession, context.platform, context.snapshotKey)) {
+    const sessionResult = annotateExportScanResult(activeSession.scanResult, context, "active-session");
+    assertNotStaleExportSource(sessionResult, context, savedSnapshot);
+    const healthData = lastHealthData || computeHealthFromScan(sessionResult);
+    logCanonicalExportSource("active-session", sessionResult, context);
+    return {
+      scanResult: sessionResult,
+      healthData,
+      context,
+      source: "active-session",
+      warning: "Fresh scan failed. Package may use the active scan session.",
+      purpose,
+    };
+  }
+
+  if (savedSnapshot) {
+    assertNotStaleExportSource(savedSnapshot, context, savedSnapshot);
+    const healthData = computeHealthFromScan(savedSnapshot);
+    console.warn("[Engram][Export] stale snapshot fallback used", {
+      reason: freshScanFailed?.message || "fresh scan unavailable",
+      fallbackMessages: getCanonicalMessageCount(savedSnapshot),
+      platform: context.platform,
+      chatId: context.chatId,
+      snapshotKey: context.snapshotKey,
+    });
+    logCanonicalExportSource(savedSnapshot.exportSource || "saved-snapshot", savedSnapshot, context);
+    return {
+      scanResult: savedSnapshot,
+      healthData,
+      context,
+      source: savedSnapshot.exportSource || "saved-snapshot",
+      warning: "Fresh scan failed. Package may use the last saved snapshot.",
+      purpose,
+    };
+  }
+
+  throw freshScanFailed || new Error("No scan data available for export.");
+}
+
+function validateMigrationPackageData(exportSr, manifest, handoffMd, fullChatMd, context) {
+  const messages = exportSr.messages || [];
+  const stats = exportSr.exportStats || getExportStats(messages);
+  const fullBlocks = (fullChatMd.match(/^## Message \d{4}$/gm) || []).length;
+  const hasText = messages.some((message) => String(message.text || "").trim().length > 0);
+  const activeUrl = context?.url || exportSr.activeTabUrl || "";
+  const sourceUrl = exportSr.url || "";
+  const activeNormalized = normalizeHealthSnapshotUrl(activeUrl);
+  const sourceNormalized = normalizeHealthSnapshotUrl(sourceUrl);
+
+  const validation = {
+    messageCount: messages.length,
+    manifestMessages: manifest?.stats?.totalMessages || 0,
+    handoffStatsMatch: handoffMd.includes("- Total messages: " + messages.length),
+    fullChatBlocks: fullBlocks,
+    totalChars: stats.totalChars || 0,
+    sourceUrl,
+    activeUrl,
+  };
+
+  const valid =
+    messages.length > 0 &&
+    manifest.stats.totalMessages === messages.length &&
+    validation.handoffStatsMatch &&
+    fullBlocks === messages.length &&
+    (!hasText || stats.totalChars > 0) &&
+    (!activeNormalized || !sourceNormalized || activeNormalized === sourceNormalized);
+
+  if (!valid) {
+    console.error("[Engram][Export] ERROR invalid package data", validation);
+    throw new Error("Package export failed validation.");
+  }
+}
+
 async function buildMigrationPackage(sr, hd, userFiles) {
   const zip = new window.ZipWriter();
   const datestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-
-  zip.addText("README_START_HERE.md", generateReadme(sr, hd));
-  zip.addText("handoff.md",           generateHandoffMarkdown(sr, hd));
-  zip.addText("full-chat-export.md",  generateFullChatExport(sr));
-  zip.addText("technical-signals.md", generateTechnicalSignalsMd(sr));
+  const exportSr = withCanonicalExportMessages(sr);
+  const exportStats = exportSr.exportStats || getExportStats(exportSr.messages || []);
+  const readmeMd = generateReadme(exportSr, hd);
+  const handoffMd = generateHandoffMarkdown(exportSr, hd);
+  const fullChatMd = generateFullChatExport(exportSr);
+  const technicalSignalsMd = generateTechnicalSignalsMd(exportSr);
 
   // User-selected files
   const userFilesMeta = [];
@@ -1311,23 +1918,30 @@ async function buildMigrationPackage(sr, hd, userFiles) {
   }
 
   // Manifest
-  const msgs = sr.messages || [];
+  const msgs = exportSr.messages || [];
   const manifest = {
     packageType: "engram-migration-package",
     version: 1,
     generatedAt: new Date().toISOString(),
-    sourcePlatform: getPlatformId(sr),
-    sourceTitle: sr.sourceTitle || null,
-    sourceUrl: sr.url || "unknown",
+    sourcePlatform: getPlatformId(exportSr),
+    sourceTitle: exportSr.sourceTitle || null,
+    sourceUrl: exportSr.url || "unknown",
     chatHealth: hd?.score ?? null,
     migrationRisk: hd?.migrationRisk ?? null,
     browserLoad: hd?.browserLoad ?? null,
     stats: {
-      userMessages: sr.userCount || 0,
-      aiMessages: sr.aiCount || 0,
-      totalMessages: sr.total || msgs.length,
-      codeBlocks: sr.codeCount || 0,
-      totalChars: sr.totalChars || 0,
+      userMessages: exportStats.userCount || 0,
+      aiMessages: exportStats.aiCount || 0,
+      systemMessages: exportStats.systemCount || 0,
+      unknownRoleMessages: exportStats.unknownCount || 0,
+      totalMessages: exportStats.total || msgs.length,
+      codeBlocks: exportStats.codeCount || 0,
+      totalChars: exportStats.totalChars || 0,
+    },
+    canonicalExport: {
+      messageCount: msgs.length,
+      source: "normalizeExportMessages(scanResult)",
+      parseSafeMarkdown: true,
     },
     includedFiles: [
       { path: "README_START_HERE.md", type: "readme" },
@@ -1337,11 +1951,21 @@ async function buildMigrationPackage(sr, hd, userFiles) {
     ],
     userAddedFiles: userFilesMeta,
   };
+
+  validateMigrationPackageData(exportSr, manifest, handoffMd, fullChatMd, {
+    url: exportSr.activeTabUrl || exportSr.url || "",
+  });
+
+  zip.addText("README_START_HERE.md", readmeMd);
+  zip.addText("handoff.md",           handoffMd);
+  zip.addText("full-chat-export.md",  fullChatMd);
+  zip.addText("technical-signals.md", technicalSignalsMd);
   zip.addText("manifest.json", JSON.stringify(manifest, null, 2));
 
   return {
     blob:     zip.build(),
     filename: `engram-migration-package-${datestamp}.zip`,
+    stats:    manifest.stats,
   };
 }
 
@@ -1353,7 +1977,36 @@ window.__ENGRAM_DEBUG__ = {
   getLastHealth: () => lastHealthData,
 };
 
-// Load state from worker
+// Load state from active manual scan sessions only
+async function getActiveScanSession(tabId, platform = activePlatform, snapshotKey = activeSnapshotKey) {
+  if (tabId === undefined || tabId === null) return null;
+  const response = await runtimeSendMessage({
+    type: "ENGRAM_GET_ACTIVE_SCAN_SESSION",
+    tabId,
+    platform,
+    snapshotKey,
+  });
+  return response?.hasActiveSession ? response.activeSession : null;
+}
+
+async function setActiveScanSession(tabId, session) {
+  if (tabId === undefined || tabId === null || !session) return;
+  await runtimeSendMessage({
+    type: "ENGRAM_SET_ACTIVE_SCAN_SESSION",
+    tabId,
+    platform: session.platform,
+    snapshotKey: session.snapshotKey,
+    session,
+  });
+}
+
+function activeSessionMatches(session, platform, snapshotKey) {
+  return !!session &&
+    session.platform === platform &&
+    session.snapshotKey === snapshotKey &&
+    !!session.scanResult;
+}
+
 async function loadState() {
   if (currentState === "settings") {
     console.log("[Engram] settings view kept during state refresh");
@@ -1381,8 +2034,23 @@ async function loadState() {
   const url = tabs[0].url || "";
 
   const platform = detectPlatformFromUrl(url);
+  activeTabId = tabId;
   activePlatform = platform;
   console.log("[Engram] active tab detected", { tabId, url, platform });
+
+  // Compute snapshotKey for the active tab and detect SPA navigation
+  {
+    activeSnapshotKey = getSnapshotKeyFromUrl(url);
+    console.log("[Engram][Popup] snapshotKey=" + activeSnapshotKey + " platform=" + platform);
+    if (_lastKnownSnapshotKey !== null && activeSnapshotKey !== _lastKnownSnapshotKey) {
+      console.log("[Engram][Popup] chat changed — resetting local state",
+        { from: _lastKnownSnapshotKey, to: activeSnapshotKey });
+      hasLocalScanResult = false;
+      scanResults = null;
+      isScanning = false;
+    }
+    _lastKnownSnapshotKey = activeSnapshotKey;
+  }
   updatePlatformDisplay(platform);
   updateSettingsPlatforms(platform);
 
@@ -1393,25 +2061,53 @@ async function loadState() {
     return;
   }
 
-  if (!isScanning && !hasLocalScanResult) {
-    if (platform === "other") {
-      renderIdle("Open ChatGPT or Claude to scan a chat", true);
-    } else {
-      try {
-        var stored = await storageGet([HEALTH_SNAPSHOT_KEY, HEALTH_SNAPSHOTS_BY_CHAT_KEY]);
-        var byChat = (stored && stored[HEALTH_SNAPSHOTS_BY_CHAT_KEY]) || null;
-        var lastSnap = (stored && stored[HEALTH_SNAPSHOT_KEY]) || null;
-        var cachedSnap = findCachedSnapshot(url, byChat, lastSnap, platform);
-        if (cachedSnap) {
-          console.log("[Engram][Popup] hydrating from cache on open", { snapshotKey: cachedSnap.snapshotKey });
-          renderFromCache(cachedSnap);
-        } else {
-          renderIdle("Scan to analyze this chat", false);
-        }
-      } catch (_) {
-        renderIdle("Scan to analyze this chat", false);
-      }
+  if (platform === "other") {
+    scanResults = null;
+    hasLocalScanResult = false;
+    updateChatTitleEl(null);
+    renderIdle("Open ChatGPT or Claude to scan a chat", true, "");
+    return;
+  }
+
+  if (!isScanning) {
+    const activeSession = await getActiveScanSession(tabId);
+    const hasActiveSession = activeSessionMatches(activeSession, platform, activeSnapshotKey);
+    console.log("[Engram][Popup] active scan session check", {
+      tabId,
+      platform,
+      snapshotKey: activeSnapshotKey,
+      hasActiveSession,
+      activeSessionSnapshotKey: activeSession?.snapshotKey || null,
+    });
+
+    if (!hasActiveSession) {
+      scanResults = null;
+      lastHealthData = null;
+      hasLocalScanResult = false;
+      updateChatTitleEl(null);
+      console.log("[Engram][Popup] scan required: no active session", {
+        tabId,
+        platform,
+        snapshotKey: activeSnapshotKey,
+      });
+      renderIdle("Scan required", false, "Scan this chat to start live tracking.");
+      return;
     }
+
+    scanResults = markScanFreshness(
+      { ...activeSession.scanResult },
+      activeSession.freshnessState || activeSession.scanResult?.freshnessState || "fresh"
+    );
+    hasLocalScanResult = true;
+    updateChatTitleEl(scanResults.sourceTitle || null);
+    console.log("[Engram][Popup] active scan session restored", {
+      tabId,
+      platform,
+      snapshotKey: activeSnapshotKey,
+      total: scanResults?.total || scanResults?.stats?.total || 0,
+    });
+    renderDone("active-session");
+    return;
   }
 
   // Get data from worker
@@ -1466,22 +2162,23 @@ async function loadState() {
   });
 }
 
-// Scan button
-on("btnScan", "click", async () => {
-  console.log("[Engram] scan button clicked");
+// Shared scan execution — called by both Scan and Rescan buttons
+async function runScan() {
   console.log("[Engram] scan started");
   isScanning = true;
   hasLocalScanResult = false;
   scanResults = null;
   $("btnScan").disabled = true;
+  const _rb = $("btnRescan");
+  if (_rb) _rb.disabled = true;
   showState("scanning");
 
-  // Start scan in content script
   try {
     const tabs = await tabsQuery({ active: true, currentWindow: true });
     if (!tabs[0]) {
       isScanning = false;
       $("btnScan").disabled = false;
+      if (_rb) _rb.disabled = false;
       renderError("No active tab found. Scan Chat is still available.");
       return;
     }
@@ -1489,74 +2186,183 @@ on("btnScan", "click", async () => {
     _dpbg("sending ENGRAM_START_SCAN", { tabId: tabs[0].id, url: tabs[0].url, activePlatform });
     const response = await tabsSendMessage(tabs[0].id, { type: "ENGRAM_START_SCAN" });
     _dpbg("raw tabsSendMessage response", { type: response?.type, total: response?.total, partial: response?.partial, chatId: response?.chatId });
-      if (!response) {
-        isScanning = false;
-        $("btnScan").disabled = false;
-        renderError("Scan did not receive a response. Reload the page and try again.");
-        return;
+    if (!response) {
+      isScanning = false;
+      $("btnScan").disabled = false;
+      if (_rb) _rb.disabled = false;
+      renderError("Scan did not receive a response. Reload the page and try again.");
+      return;
+    }
+
+    if (response.type === "ENGRAM_SCAN_COMPLETE") {
+      console.log("[Engram] scan completed", response);
+      _dpbg("scan-complete branch", { total: response.total, userCount: response.userCount, aiCount: response.aiCount, partial: response.partial, strategy: response.extractionStrategy });
+      isScanning = false;
+      hasLocalScanResult = true;
+      activeTabId = tabs[0].id;
+      activePlatform = detectPlatformFromUrl(tabs[0].url || "");
+      if (activePlatform === "other") activePlatform = getPlatformId(response);
+      activeSnapshotKey = getSnapshotKeyFromUrl(tabs[0].url || response.url || "");
+      scanResults = markScanFreshness(response, "fresh");
+      scanResults.chatId = response.chatId;
+      scanResults.snapshotKey = activeSnapshotKey;
+
+      await setActiveScanSession(tabs[0].id, {
+        platform: activePlatform,
+        chatId: response.chatId || null,
+        snapshotKey: activeSnapshotKey,
+        startedAt: Date.now(),
+        lastUpdatedAt: Date.now(),
+        freshnessState: "fresh",
+        scanResult: scanResults,
+      });
+
+      updateChatTitleEl(response.sourceTitle || null);
+      renderDone("scan-complete");
+      await persistScanResult(response);
+
+      // Notify content script immediately so widget updates without a storage round-trip
+      const _bePlatform = getPlatformId(response);
+      const _beKey = activeSnapshotKey || getHealthSnapshotKey(response);
+      const _beHd = lastHealthData;
+      if (_bePlatform !== "other" && _beHd && tabs[0]) {
+        const _beDisp = getHealthDisplay(_beHd.score);
+        tabsSendMessage(tabs[0].id, {
+          type: "ENGRAM_BASELINE_ESTABLISHED",
+          platform: _bePlatform,
+          snapshotKey: _beKey,
+          sourceUrl: response.url || "",
+          stats: {
+            total: response.total || 0,
+            userCount: response.userCount || 0,
+            aiCount: response.aiCount || 0,
+            codeCount: response.codeCount || 0,
+            totalChars: response.totalChars || 0,
+          },
+          healthLabel: _beDisp.label,
+          healthColor: _beDisp.color,
+        }).catch(() => {});
+        console.log("[Engram] ENGRAM_BASELINE_ESTABLISHED sent snapshotKey=" + _beKey);
       }
 
-      if (response.type === "ENGRAM_SCAN_COMPLETE") {
-        console.log("[Engram] scan completed", response);
-        _dpbg("scan-complete branch", { total: response.total, userCount: response.userCount, aiCount: response.aiCount, partial: response.partial, strategy: response.extractionStrategy });
-        isScanning = false;
-        hasLocalScanResult = true;
-        scanResults = response;
-        scanResults.chatId = response.chatId;
-
-        updateChatTitleEl(response.sourceTitle || null);
-        renderDone("scan-complete");
-        persistScanResult(response);
-
-        loadState(); // Refresh gauge
-      }
+      loadState();
+    }
   } catch (e) {
     isScanning = false;
     hasLocalScanResult = false;
     $("btnScan").disabled = false;
+    if ($("btnRescan")) $("btnRescan").disabled = false;
     renderError("Error starting scan. Reload the page and try again.");
   }
-});
+}
+
+// Scan button (idle view)
+on("btnScan", "click", () => runScan());
+
+// Rescan button (done view — always available after first scan)
+on("btnRescan", "click", () => runScan());
 
 // Listen for scan progress
 _api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === "ENGRAM_ACTIVE_SCAN_SESSION_UPDATED") {
+    if (msg.tabId !== activeTabId) return;
+    if (msg.platform !== activePlatform) return;
+    if (msg.snapshotKey !== activeSnapshotKey) return;
+    scanResults = markScanFreshness(
+      { ...(msg.scanResult || {}) },
+      msg.scanResult?.baselineSource === "live_update_after_baseline" ? "live" : "fresh"
+    );
+    scanResults.snapshotKey = activeSnapshotKey;
+    hasLocalScanResult = true;
+    updateChatTitleEl(scanResults.sourceTitle || null);
+    console.log("[Engram][Popup] live update rendered", {
+      platform: activePlatform,
+      snapshotKey: activeSnapshotKey,
+      total: scanResults?.total || scanResults?.stats?.total || 0,
+    });
+    renderDone("live-update");
+    return;
+  }
+
   if (msg.type === "ENGRAM_SCAN_PROGRESS") {
     $("scanCount").textContent = `⟳ Scanning... ${msg.count} messages found`;
     $("scanProgress").style.width = msg.percent + "%";
   }
 
   if (msg.type === "ENGRAM_SCAN_COMPLETE") {
-    console.log("[Engram] scan completed", msg);
-    isScanning = false;
-    hasLocalScanResult = true;
-    scanResults = msg;
-    scanResults.chatId = msg.chatId;
+    (async () => {
+      console.log("[Engram] scan completed", msg);
+      isScanning = false;
+      hasLocalScanResult = true;
 
-    updateChatTitleEl(msg.sourceTitle || null);
-    renderDone("scan-complete-message");
-    persistScanResult(msg);
+      let tab = null;
+      try {
+        const tabs = await tabsQuery({ active: true, currentWindow: true });
+        tab = tabs[0] || null;
+      } catch (_) {}
 
-    loadState(); // Refresh gauge
+      const tabId = tab?.id ?? activeTabId;
+      const tabUrl = tab?.url || msg.url || "";
+      activeTabId = tabId;
+      activePlatform = detectPlatformFromUrl(tabUrl);
+      if (activePlatform === "other") activePlatform = getPlatformId(msg);
+      activeSnapshotKey = getSnapshotKeyFromUrl(tabUrl);
+
+      scanResults = markScanFreshness(msg, "fresh");
+      scanResults.chatId = msg.chatId;
+      scanResults.snapshotKey = activeSnapshotKey;
+
+      await setActiveScanSession(tabId, {
+        platform: activePlatform,
+        chatId: msg.chatId || null,
+        snapshotKey: activeSnapshotKey,
+        startedAt: Date.now(),
+        lastUpdatedAt: Date.now(),
+        freshnessState: "fresh",
+        scanResult: scanResults,
+      });
+
+      updateChatTitleEl(msg.sourceTitle || null);
+      renderDone("scan-complete-message");
+      persistScanResult(msg);
+
+      loadState(); // Refresh active session from runtime storage
+    })();
   }
 });
 
 // Generate Handoff
 on("btnHandoff", "click", async () => {
   const statusBar = $("statusBar");
-  statusBar.textContent = "Generating handoff...";
+  statusBar.textContent = "Refreshing chat before handoff...";
   statusBar.style.color = "";
 
-  // Try AI generation via configured endpoint first
-  const aiSuccess = await tryAIHandoff();
+  let exportSource;
+  try {
+    exportSource = await getCanonicalScanResultForExport("handoff");
+    statusBar.textContent = exportSource.warning || "Generating handoff...";
+    statusBar.style.color = exportSource.warning ? "#f59e0b" : "";
+  } catch (e) {
+    console.error("[Engram] handoff fresh export source failed", e);
+    statusBar.textContent = e?.message || "Fresh scan failed. Please scan again.";
+    statusBar.style.color = "#ef4444";
+    return;
+  }
+
+  const exportScanResult = exportSource.scanResult;
+  const exportHealthData = exportSource.healthData;
+
+  // Try AI generation via configured endpoint first, using the fresh export source.
+  const aiSuccess = await tryAIHandoff(exportScanResult);
   if (aiSuccess) return;
 
   // Generate locally from scan results (preferred path)
-  if (scanResults && (scanResults.messages?.length || scanResults.total > 0)) {
-    const markdown = generateHandoffMarkdown(scanResults, lastHealthData);
+  if (exportScanResult && (exportScanResult.messages?.length || exportScanResult.total > 0)) {
+    const markdown = generateHandoffMarkdown(exportScanResult, exportHealthData);
     try {
       await navigator.clipboard.writeText(markdown);
-      statusBar.textContent = "✓ Handoff copied to clipboard!";
-      statusBar.style.color = "#22c55e";
+      statusBar.textContent = exportSource.warning || "Handoff copied to clipboard!";
+      statusBar.style.color = exportSource.warning ? "#f59e0b" : "#22c55e";
     } catch (e) {
       // Clipboard blocked — fall back to download
       const blob = new Blob([markdown], { type: "text/markdown" });
@@ -1566,70 +2372,46 @@ on("btnHandoff", "click", async () => {
       a.download = `engram-handoff-${Date.now()}.md`;
       a.click();
       URL.revokeObjectURL(url);
-      statusBar.textContent = "✓ Handoff downloaded (clipboard blocked)";
-      statusBar.style.color = "#22c55e";
+      statusBar.textContent = exportSource.warning || "Handoff downloaded (clipboard blocked)";
+      statusBar.style.color = exportSource.warning ? "#f59e0b" : "#22c55e";
     }
     clearStatusBarLater(statusBar.textContent, 4000);
     return;
   }
-
-  // No local scan — try worker fallback
-  console.log("[Engram] no local scan results, trying worker handoff");
-  const res = await runtimeSendMessage({ type: "ENGRAM_GENERATE_HANDOFF" });
-  if (!res) {
-    statusBar.textContent = "Scan first to generate a handoff";
-    clearStatusBarLater(statusBar.textContent, 3000);
-    return;
-  }
-  if (res.error) {
-    statusBar.textContent = res.error;
-    return;
-  }
-  const prompt = res.continuationPrompt || res.handoff?.continuationPrompt;
-  if (!prompt) {
-    statusBar.textContent = "No handoff data — scan first";
-    clearStatusBarLater(statusBar.textContent, 3000);
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(prompt);
-    statusBar.textContent = "✓ Handoff copied to clipboard!";
-    statusBar.style.color = "#22c55e";
-    clearStatusBarLater(statusBar.textContent, 3000);
-  } catch (e) {
-    statusBar.textContent = "Clipboard blocked — see console";
-    statusBar.style.color = "#ef4444";
-  }
+  statusBar.textContent = "No handoff data - scan first";
+  clearStatusBarLater(statusBar.textContent, 3000);
+  return;
 });
 
 // Export Migration Package (immediate, no file picker)
 on("btnExportPackage", "click", async () => {
   const statusBar = $("statusBar");
 
-  if (!scanResults) {
-    statusBar.textContent = "Scan first to export a migration package";
-    statusBar.style.color = "";
-    clearStatusBarLater(statusBar.textContent, 3000);
-    return;
-  }
-
-  statusBar.textContent = "Building migration package...";
+  statusBar.textContent = "Refreshing chat before export...";
   statusBar.style.color = "";
 
   try {
-    const { blob, filename } = await buildMigrationPackage(scanResults, lastHealthData, []);
+    const exportSource = await getCanonicalScanResultForExport("package");
+    statusBar.textContent = exportSource.warning || "Building migration package...";
+    statusBar.style.color = exportSource.warning ? "#f59e0b" : "";
+    const { blob, filename, stats } = await buildMigrationPackage(
+      exportSource.scanResult,
+      exportSource.healthData,
+      []
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    statusBar.textContent = "✓ Migration package downloaded";
-    statusBar.style.color = "#22c55e";
+    statusBar.textContent = exportSource.warning || "Migration package downloaded";
+    statusBar.style.color = exportSource.warning ? "#f59e0b" : "#22c55e";
+    console.log("[Engram][Export] package downloaded", stats);
     clearStatusBarLater(statusBar.textContent, 4000);
   } catch (e) {
     console.error("[Engram] package export failed", e);
-    statusBar.textContent = "Package export failed";
+    statusBar.textContent = e?.message || "Package export failed";
     statusBar.style.color = "#ef4444";
   }
 });
@@ -1637,13 +2419,6 @@ on("btnExportPackage", "click", async () => {
 // Export Migration Package with Files (file picker first)
 on("btnExportWithFiles", "click", async () => {
   const statusBar = $("statusBar");
-
-  if (!scanResults) {
-    statusBar.textContent = "Scan first to export a migration package";
-    statusBar.style.color = "";
-    clearStatusBarLater(statusBar.textContent, 3000);
-    return;
-  }
 
   const fileInput = $("filePickerInput");
   fileInput.value = "";
@@ -1665,27 +2440,35 @@ on("btnExportWithFiles", "click", async () => {
   });
 
   if (userFiles.length === 0) {
-    statusBar.textContent = "No files selected — exporting package without attachments";
+    statusBar.textContent = "Refreshing chat before export...";
     statusBar.style.color = "";
   } else {
-    statusBar.textContent = "Building migration package...";
+    statusBar.textContent = "Refreshing chat before export...";
     statusBar.style.color = "";
   }
 
   try {
-    const { blob, filename } = await buildMigrationPackage(scanResults, lastHealthData, userFiles);
+    const exportSource = await getCanonicalScanResultForExport("package-with-files");
+    statusBar.textContent = exportSource.warning || "Building migration package...";
+    statusBar.style.color = exportSource.warning ? "#f59e0b" : "";
+    const { blob, filename, stats } = await buildMigrationPackage(
+      exportSource.scanResult,
+      exportSource.healthData,
+      userFiles
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    statusBar.textContent = "✓ Migration package downloaded";
-    statusBar.style.color = "#22c55e";
+    statusBar.textContent = exportSource.warning || "Migration package downloaded";
+    statusBar.style.color = exportSource.warning ? "#f59e0b" : "#22c55e";
+    console.log("[Engram][Export] package downloaded", stats);
     clearStatusBarLater(statusBar.textContent, 4000);
   } catch (e) {
     console.error("[Engram] package export failed", e);
-    statusBar.textContent = "Package export failed";
+    statusBar.textContent = e?.message || "Package export failed";
     statusBar.style.color = "#ef4444";
   }
 });
@@ -2041,3 +2824,52 @@ renderIdle();
 loadSettings();
 loadState();
 setInterval(loadState, 3000);
+
+// React to live scans arriving while the popup is open
+try {
+  const _onChanged = isFirefox ? browser.storage.onChanged : chrome.storage.onChanged;
+  _onChanged.addListener((changes, area) => {
+    (async () => {
+    if (area !== "local" && area !== "session") return;
+    if (currentState === "scanning" || currentState === "settings" || currentState === "linkedin") return;
+
+    const liveKeys = ["engramChatgptLatestScanResult", "engramClaudeLatestScanResult"];
+    const changedKey = liveKeys.find(k => k in changes);
+    const activeSessionsChanged = ACTIVE_SCAN_SESSIONS_KEY in changes;
+    if (!changedKey && !activeSessionsChanged) return;
+
+    const activeSession = await getActiveScanSession(activeTabId);
+    const hasActiveSession = activeSessionMatches(activeSession, activePlatform, activeSnapshotKey);
+    console.log("[Engram][Popup] active scan session check", {
+      tabId: activeTabId,
+      platform: activePlatform,
+      snapshotKey: activeSnapshotKey,
+      hasActiveSession,
+      activeSessionSnapshotKey: activeSession?.snapshotKey || null,
+    });
+    if (!hasActiveSession) {
+      console.log("[Engram][Popup] scan required: no active session", {
+        tabId: activeTabId,
+        platform: activePlatform,
+        snapshotKey: activeSnapshotKey,
+      });
+      return;
+    }
+
+    scanResults = markScanFreshness(
+      { ...activeSession.scanResult },
+      activeSession.scanResult?.baselineSource === "live_update_after_baseline" ? "live" : "fresh"
+    );
+    scanResults.snapshotKey = activeSnapshotKey;
+    hasLocalScanResult = true;
+    updateChatTitleEl(scanResults.sourceTitle || null);
+    console.log("[Engram][Popup] live update rendered", {
+      tabId: activeTabId,
+      platform: activePlatform,
+      snapshotKey: activeSnapshotKey,
+      total: scanResults?.total || scanResults?.stats?.total || 0,
+    });
+    renderDone(scanResults.freshnessState === "live" ? "live-update" : "scan-complete");
+    })();
+  });
+} catch (_) {}

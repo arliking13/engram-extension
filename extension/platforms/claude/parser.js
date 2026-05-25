@@ -166,7 +166,7 @@
 
     for (let i = 2; i <= Math.floor(normalized.length / 2); i += 1) {
       const prefix = normalized.slice(0, i);
-      if (!/[a-zа-яё0-9]/i.test(prefix)) continue;
+      if (!/[a-z\u0400-\u04ff0-9]/i.test(prefix)) continue;
       if (!normalized.startsWith(prefix + prefix)) continue;
 
       const rest = normalized.slice(i * 2).trim();
@@ -185,7 +185,7 @@
   function isTimestampOrDateOnly(text) {
     const normalized = normalizeText(text).toLowerCase();
     if (/^\d{1,2}:\d{2}$/.test(normalized)) return true;
-    return /^\d{1,2}\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(?:\s+\d{4})?$/.test(normalized);
+    return /^\d{1,2}\s+(\u044f\u043d\u0432\u0430\u0440\u044f|\u0444\u0435\u0432\u0440\u0430\u043b\u044f|\u043c\u0430\u0440\u0442\u0430|\u0430\u043f\u0440\u0435\u043b\u044f|\u043c\u0430\u044f|\u0438\u044e\u043d\u044f|\u0438\u044e\u043b\u044f|\u0430\u0432\u0433\u0443\u0441\u0442\u0430|\u0441\u0435\u043d\u0442\u044f\u0431\u0440\u044f|\u043e\u043a\u0442\u044f\u0431\u0440\u044f|\u043d\u043e\u044f\u0431\u0440\u044f|\u0434\u0435\u043a\u0430\u0431\u0440\u044f)(?:\s+\d{4})?$/.test(normalized);
   }
 
   const claude = Object.assign(Object.create(base), {
@@ -326,6 +326,36 @@
   // ── Message Handlers ───────────────────────────────────────────────────
 
   runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === "ENGRAM_ACTIVE_SCAN_SESSION_UPDATED") {
+      const currentKeys = _wCurrentSnapshotKeys();
+      if (msg.platform === "claude" && msg.snapshotKey && currentKeys.includes(msg.snapshotKey)) {
+        _wActiveSession = msg.activeSession || null;
+        _wLastKey = "";
+        console.log("[Engram][Widget] live update rendered", {
+          platform: "claude",
+          snapshotKey: msg.snapshotKey,
+          total: msg.scanResult?.total || msg.scanResult?.stats?.total || 0,
+        });
+        if (_wEl) _wUpdate();
+      }
+      if (isFirefox) return Promise.resolve({ ok: true });
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    if (msg.type === "ENGRAM_BASELINE_ESTABLISHED") {
+      const snapshotKey = msg.snapshotKey;
+      const currentKeys = _wCurrentSnapshotKeys();
+      if (snapshotKey && currentKeys.includes(snapshotKey)) {
+        console.log("[Engram][Claude] baseline established snapshotKey=" + snapshotKey);
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
+      }
+      if (isFirefox) return Promise.resolve({ ok: true });
+      sendResponse({ ok: true });
+      return true;
+    }
+
     if (msg.type === "ENGRAM_START_SCAN") {
       const response = performComprehensiveScan();
 
@@ -405,7 +435,7 @@
 
   function getCurrentChatId() {
     // Extract chat ID from URL or generate from title
-    const match = window.location.pathname.match(/\/c\/([a-z0-9]+)/i);
+    const match = window.location.pathname.match(/\/(?:chat|c)\/([a-z0-9-]+)/i);
     return match ? match[1] : "unknown";
   }
 
@@ -481,6 +511,117 @@
   }
 
   let lastMessageCount = 0;
+  let _loUserTimer     = null; // user_committed debounce
+  let _loAiTimer       = null; // assistant_complete debounce
+  let _liveLastSig     = "";   // per-snapshotKey dedup signature
+
+  async function _livePersistClaude(liveReason) {
+    const msgs = captureDomMessages();
+    if (!msgs.length) return;
+    if (liveReason === "assistant_complete" && !msgs.some(m => m.role === "assistant")) return;
+
+    const chatId = getCurrentChatId();
+    const snapshotKey = chatId && chatId !== "unknown"
+      ? "chat:" + chatId
+      : "url:" + _wNormalizeUrl(window.location.href);
+
+    const last = msgs[msgs.length - 1];
+    const sig  = snapshotKey + "|" + msgs.length + "|" + last.role + "|" +
+                 (last.text || "").slice(0, 30) + "|" + (last.text || "").length;
+    if (sig === _liveLastSig) {
+      console.log("[Engram][Live][Claude] skipped duplicate signature snapshotKey=" + snapshotKey);
+      return;
+    }
+    _liveLastSig = sig;
+
+    const userCount  = msgs.filter(m => m.role === "user").length;
+    const aiCount    = msgs.filter(m => m.role === "assistant").length;
+    const codeCount  = msgs.flatMap(m => m.codeBlocks || []).length;
+    const totalChars = msgs.reduce((s, m) => s + (m.text?.length || 0), 0);
+
+    console.log("[Engram][Live] observer detected change", {
+      platform: "claude",
+      reason: liveReason,
+      snapshotKey,
+      total: msgs.length,
+      userCount,
+      aiCount,
+      codeCount,
+    });
+    if (liveReason === "user_committed") {
+      console.log("[Engram][Live][Claude] user_committed detected userCount=" + userCount + " total=" + msgs.length);
+    } else {
+      console.log("[Engram][Live][Claude] assistant_complete detected aiCount=" + aiCount + " total=" + msgs.length);
+    }
+    console.log("[Engram][Live][Claude] persisted reason=" + liveReason + " snapshotKey=" + snapshotKey + " messages=" + msgs.length);
+
+    const liveMsg = {
+      type:               "ENGRAM_LIVE_SCAN_COMPLETE",
+      platform:           "claude",
+      liveReason,
+      messages:           msgs,
+      chatId,
+      snapshotKey,
+      sourceUrl:          window.location.href,
+      sourceTitle:        getChatTitle(),
+      scannedAt:          Date.now(),
+      total:              msgs.length,
+      userCount,
+      aiCount,
+      codeCount,
+      totalChars,
+      extractionStrategy: "live-dom",
+    };
+    let resp = null;
+    try {
+      console.log("[Engram][Live] sending ENGRAM_LIVE_SCAN_COMPLETE", {
+        platform: "claude",
+        reason: liveReason,
+        snapshotKey,
+        total: msgs.length,
+      });
+      if (isFirefox) {
+        resp = await runtime.sendMessage(liveMsg).catch(() => null);
+      } else {
+        resp = await new Promise((resolve) => {
+          runtime.sendMessage(liveMsg, (r) => {
+            void chrome.runtime.lastError;
+            resolve(r || null);
+          });
+        });
+      }
+    } catch (_) {}
+
+    if (!resp || !resp.hasActiveSession) {
+      console.log("[Engram][Live][Claude] skipped widget update: no active session snapshotKey=" + snapshotKey);
+      return;
+    }
+    // Update widget in-process — no storage round-trip needed
+    _wActiveSession = resp.activeSession || null;
+    _wLastKey = "";
+    console.log("[Engram][Widget] live update rendered", {
+      platform: "claude",
+      snapshotKey,
+      total: _wActiveSession?.scanResult?.total || _wActiveSession?.scanResult?.stats?.total || 0,
+    });
+    if (_wEl) _wUpdate();
+  }
+
+  function _scheduleLiveScan(reason) {
+    if (reason === "user_committed") {
+      if (_loUserTimer) { clearTimeout(_loUserTimer); }
+      _loUserTimer = setTimeout(() => {
+        _loUserTimer = null;
+        _livePersistClaude("user_committed");
+      }, 600);
+    } else {
+      if (_loAiTimer) { clearTimeout(_loAiTimer); }
+      _loAiTimer = setTimeout(() => {
+        _loAiTimer = null;
+        _livePersistClaude("assistant_complete");
+      }, 2000);
+    }
+  }
 
   function updateHealthSignals(messages) {
     const allMessages = messages || claude.getAllMessages();
@@ -525,6 +666,20 @@
     const messages = captureDomMessages();
     sendNewMessages(messages);
     updateHealthSignals(messages);
+
+    // Detect if this mutation introduced a new user message node
+    let hasNewUserNode = false;
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        if (
+          (node.matches    && node.matches('[data-testid="user-message"]')) ||
+          (node.querySelector && node.querySelector('[data-testid="user-message"]'))
+        ) { hasNewUserNode = true; break; }
+      }
+      if (hasNewUserNode) break;
+    }
+    _scheduleLiveScan(hasNewUserNode ? "user_committed" : "assistant_complete");
   }
 
   // Poll is only a fallback for late-rendered DOM; MutationObserver is primary.
@@ -566,6 +721,7 @@
   let _wPos       = null;  // { left, top } in px, null = use CSS default (bottom/right)
   let _wSnapshot  = null;
   let _wSnapshotsByChatId = {};
+  let _wActiveSession = null;
 
   // Drag state
   let _wDragging    = false;
@@ -643,15 +799,52 @@
     return keys;
   }
 
-  function _wFindExactSnapshot() {
-    const keys = _wCurrentSnapshotKeys();
-    for (const key of keys) {
-      if (_wSnapshotsByChatId[key] && _wMatchesCurrentChat(_wSnapshotsByChatId[key])) {
-        return _wSnapshotsByChatId[key];
-      }
-    }
+  function _wCurrentSnapshotKey() {
+    return _wCurrentSnapshotKeys()[0] || "url:" + _wNormalizeUrl(window.location.href);
+  }
 
-    return _wMatchesCurrentChat(_wSnapshot) ? _wSnapshot : null;
+  function _wRuntimeSend(message) {
+    if (isFirefox) return runtime.sendMessage(message).catch(() => null);
+    return new Promise((resolve) => {
+      runtime.sendMessage(message, (response) => {
+        void chrome.runtime.lastError;
+        resolve(response || null);
+      });
+    });
+  }
+
+  async function _wRefreshActiveSession() {
+    const snapshotKey = _wCurrentSnapshotKey();
+    const response = await _wRuntimeSend({
+      type: "ENGRAM_GET_ACTIVE_SCAN_SESSION",
+      platform: "claude",
+      snapshotKey,
+    });
+    const hasActiveSession = !!response?.hasActiveSession;
+    console.log("[Engram][Widget] active scan session check", {
+      platform: "claude",
+      snapshotKey,
+      hasActiveSession,
+    });
+    if (!hasActiveSession) {
+      _wActiveSession = null;
+      console.log("[Engram][Widget] scan required: no active session", {
+        platform: "claude",
+        snapshotKey,
+      });
+      return null;
+    }
+    _wActiveSession = response.activeSession || null;
+    console.log("[Engram][Widget] rendered active session", {
+      platform: "claude",
+      snapshotKey,
+      total: _wActiveSession?.scanResult?.total || _wActiveSession?.scanResult?.stats?.total || 0,
+    });
+    return _wActiveSession;
+  }
+
+  function _wFindExactSnapshot() {
+    return _wActiveSession?.scanResult || null;
   }
 
   function _wSnapshotColor(label) {
@@ -707,22 +900,25 @@
 
   function _wStats() {
     const exactSnapshot = _wFindExactSnapshot();
-    if (!exactSnapshot) return _wLiveStats();
+    if (!exactSnapshot) return { mode: "scan-needed", hasData: false };
 
     const stats = exactSnapshot.stats || {};
-    const label = exactSnapshot.healthLabel || exactSnapshot.statusLabel || "Not scanned";
+    const total = stats.total || exactSnapshot.total || 0;
+    const code = stats.codeCount || exactSnapshot.codeCount || 0;
+    const status = _wLiveStatus(total, code);
+    const label = exactSnapshot.healthLabel || exactSnapshot.statusLabel || status.label;
     return {
       mode: "exact",
       hasData: true,
-      total: stats.total || 0,
-      user: stats.userCount || 0,
-      ai: stats.aiCount || 0,
-      code: stats.codeCount || 0,
+      total,
+      user: stats.userCount || exactSnapshot.userCount || 0,
+      ai: stats.aiCount || exactSnapshot.aiCount || 0,
+      code,
       label,
-      color: exactSnapshot.healthColor || _wSnapshotColor(label),
+      color: exactSnapshot.healthColor || status.color || _wSnapshotColor(label),
       risk: exactSnapshot.migrationRisk || "—",
       load: exactSnapshot.browserLoad || "—",
-      source: "Last scan",
+      source: "Active scan",
       time: _wFormatTime(exactSnapshot.scannedAt),
       scannedAt: exactSnapshot.scannedAt || 0,
     };
@@ -732,6 +928,29 @@
   // Only the close button keeps its own onclick (pointerdown guard excludes it from drag).
   function _wRender(st) {
     if (!_wEl) return;
+
+    if (st.mode === "scan-needed" && _wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact' title='Click Scan Chat in the Engram popup for accurate results'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>Scan required</span>" +
+        "</div>";
+      return;
+    }
+
+    if (st.mode === "scan-needed") {
+      _wEl.innerHTML =
+        "<div class='ew-head'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+        "</div>" +
+        "<div class='ew-body'>" +
+          "<div class='ew-hint ew-hint-expanded'>Not scanned. Click <b>Scan</b> in the Engram popup to start live tracking.</div>" +
+        "</div>";
+      _wEl.querySelector(".ew-close").onclick = _wToggle;
+      return;
+    }
 
     if (!st.hasData && _wCollapsed) {
       _wEl.innerHTML =
@@ -816,17 +1035,18 @@
         "<div class='ew-kv'><span class='ew-k'>Messages</span><span class='ew-v'>" + st.total + "</span></div>" +
         "<div class='ew-kv'><span class='ew-k'>Code blocks</span><span class='ew-v'>" + st.code + "</span></div>" +
         "<div class='ew-kv'><span class='ew-k'>Accuracy</span><span class='ew-v'>Full scan</span></div>" +
-        "<div class='ew-time'>Last scan: " + st.time + "</div>" +
+        "<div class='ew-time'>Active scan: " + st.time + "</div>" +
       "</div>";
     _wEl.querySelector(".ew-close").onclick = _wToggle;
   }
 
-  function _wUpdate() {
+  async function _wUpdate() {
     if (!_wEl) return;
+    await _wRefreshActiveSession();
     const st  = _wStats();
     const key = st.hasData
       ? (st.mode + "|" + st.label + "|" + (st.risk || "") + "|" + (st.load || "") + "|" + st.total + "|" + st.user + "|" + st.ai + "|" + st.code + "|" + (st.scannedAt || "") + "|" + _wCollapsed)
-      : ("empty|" + _wCollapsed);
+      : ((st.mode || "empty") + "|" + _wCollapsed);
     if (key === _wLastKey) return;
     _wLastKey = key;
     _wRender(st);
@@ -976,16 +1196,10 @@
       const keys = [
         "engramWidgetCollapsed",
         "engramWidgetPos",
-        "engramLastHealthSnapshot",
-        "engramHealthSnapshotsByChatId",
       ];
       const cb = (result) => {
         if (result) {
           if ("engramWidgetCollapsed" in result) _wCollapsed = !!result.engramWidgetCollapsed;
-          if ("engramLastHealthSnapshot" in result) _wSnapshot = result.engramLastHealthSnapshot || null;
-          if ("engramHealthSnapshotsByChatId" in result) {
-            _wSnapshotsByChatId = result.engramHealthSnapshotsByChatId || {};
-          }
           const pos = result.engramWidgetPos;
           if (pos && typeof pos.left === "number" && typeof pos.top === "number") {
             _wApplyPos(pos.left, pos.top);
@@ -1020,17 +1234,8 @@
         if (!enabled && _wEl) { _wRemove(); }
       });
       onChanged.addListener((changes, area) => {
-        if (area !== "local") return;
-        let changed = false;
-        if (changes.engramLastHealthSnapshot) {
-          _wSnapshot = changes.engramLastHealthSnapshot.newValue || null;
-          changed = true;
-        }
-        if (changes.engramHealthSnapshotsByChatId) {
-          _wSnapshotsByChatId = changes.engramHealthSnapshotsByChatId.newValue || {};
-          changed = true;
-        }
-        if (!changed) return;
+        if (area !== "local" && area !== "session") return;
+        if (!changes["engram:runtime:activeScanSessions"]) return;
         _wLastKey = "";
         if (_wEl) _wUpdate();
       });
@@ -1038,6 +1243,15 @@
   }
 
   // Widget refresh on its own 3s tick — never called from MutationObserver
+  let _wLastHref = window.location.href;
+  setInterval(() => {
+    if (window.location.href === _wLastHref) return;
+    _wLastHref = window.location.href;
+    _wActiveSession = null;
+    _wLastKey = "";
+    if (_wEnabled && _wEl) _wUpdate();
+  }, 500);
+
   setInterval(() => { if (_wEnabled && _wEl) _wUpdate(); }, 3000);
 
   if (document.body) { _wBootstrap(); }
