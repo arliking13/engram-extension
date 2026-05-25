@@ -375,6 +375,10 @@ body {
   color: var(--text-muted);
 }
 
+.btn-ghost.btn-block {
+  flex: none;
+}
+
 .btn-ghost:hover:not(:disabled) {
   border-color: rgba(30, 144, 255, 0.42);
   background: rgba(30, 144, 255, 0.10);
@@ -397,6 +401,29 @@ body {
 
 .btn-block {
   width: 100%;
+}
+
+.btn-outlined {
+  width: 100%;
+  border-color: rgba(168, 129, 254, 0.50);
+  background: rgba(168, 129, 254, 0.08);
+  color: var(--accent);
+}
+
+.btn-outlined:hover:not(:disabled) {
+  border-color: rgba(168, 129, 254, 0.72);
+  background: rgba(168, 129, 254, 0.15);
+  color: #ffffff;
+  opacity: 1;
+}
+
+.job-action-hint {
+  color: var(--text-dim);
+  font-size: 10.5px;
+  line-height: 1.45;
+  text-align: center;
+  padding: 0 4px;
+  min-height: 14px;
 }
 
 .action-buttons {
@@ -852,7 +879,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 0;
+  padding: 6px 12px;
 }
 
 .job-prev-avatar {

@@ -21,6 +21,9 @@
     <span class="header-count" id="headerCount">0 saved</span>
   </header>
 
+  <!-- Microcopy -->
+  <p class="page-desc">Saved LinkedIn jobs are stored here and can be exported as an AI-ready package.</p>
+
   <!-- Toolbar -->
   <div class="toolbar">
     <div class="toolbar-left">
@@ -30,10 +33,13 @@
       <div class="toolbar-sep"></div>
       <span class="queued-badge" id="queuedCount">0 queued</span>
     </div>
-    <button class="btn btn-primary" id="btnBuildPackage">
-      <img class="btn-icon" src="../assets/engram-icon.png" alt="" aria-hidden="true">
-      Build Job Package
-    </button>
+    <div class="toolbar-right">
+      <button class="btn-ghost-sm" id="btnCopyPrompt">⬡ Copy AI Prompt</button>
+      <button class="btn btn-primary" id="btnBuildPackage">
+        <img class="btn-icon" src="../assets/engram-icon.png" alt="" aria-hidden="true">
+        Build Job Package
+      </button>
+    </div>
   </div>
 
   <!-- Status bar -->
@@ -46,6 +52,13 @@
 
   <div class="empty-state" id="emptyState">
     No saved jobs yet.<br>Use the Engram widget on LinkedIn job pages to save jobs here.
+  </div>
+
+  <!-- AI shortcuts -->
+  <div class="ai-shortcuts">
+    <span class="ai-shortcuts-label">Continue in AI</span>
+    <button class="btn-ai" id="btnOpenChatGPT">ChatGPT ↗</button>
+    <button class="btn-ai" id="btnOpenClaude">Claude ↗</button>
   </div>
 
 </div>

@@ -2,8 +2,11 @@
  * Engram — LinkedIn Job Widget
  * Collapsible floating widget for LinkedIn job pages.
  *
- * Collapsed pill: [⬡] Engram · N saved  [▶]
- * Expanded card:  header + job preview + Save + Copy AI Prompt + footer count
+ * Collapsed pill: Engram · [job title] ▸  (or  Engram · N saved ▸)
+ * Expanded card:  dark-glass card matching AI widget style
+ *
+ * Toggle: click anywhere on collapsed pill to expand; click header to collapse.
+ * Buttons (Save Job, Copy AI Prompt) never accidentally toggle the widget.
  *
  * Global visibility: controlled by engramSettings.linkedInWidgetEnabled
  * Collapse state:    stored in engramLinkedInWidgetCollapsed
@@ -51,13 +54,14 @@ console.log('[Engram] LinkedIn widget script loaded');
 
   // ── Module state ─────────────────────────────────────────────────────────────
 
-  const WIDGET_ID = 'engram-job-widget-root';
+  const WIDGET_ID        = 'engram-job-widget-root';
   let lastRenderedUrl    = null;
   let currentJob         = null;
   let isCollapsed        = false;
   let pollCount          = 0;
   const MAX_POLLS        = 20;
   let _resolvedLogoJobId = null;
+  let _pillShowsJobTitle = false; // true when pill label shows job title, not count
 
   // ── Message listener ─────────────────────────────────────────────────────────
 
@@ -74,7 +78,7 @@ console.log('[Engram] LinkedIn widget script loaded');
 
   function fillAvatar(avEl, j) {
     avEl.innerHTML = '';
-    const initials = (j && (j.companyInitials || (j.company ? j.company.slice(0,1).toUpperCase() : '?'))) || '?';
+    const initials = (j && (j.companyInitials || (j.company ? j.company.slice(0, 1).toUpperCase() : '?'))) || '?';
     if (j && j.companyLogoUrl) {
       const img = document.createElement('img');
       img.src = j.companyLogoUrl;
@@ -86,13 +90,25 @@ console.log('[Engram] LinkedIn widget script loaded');
     }
   }
 
+  // ── Pill text helper ─────────────────────────────────────────────────────────
+
+  function _pillText(job, savedCount) {
+    if (job && job.title) {
+      const t = job.title.length > 26 ? job.title.slice(0, 24) + '…' : job.title;
+      return 'Engram \xb7 ' + t + ' ▸';
+    }
+    return 'Engram \xb7 ' + savedCount + ' saved ▸';
+  }
+
   // ── Count labels ─────────────────────────────────────────────────────────────
 
   function updateCountLabels(root, saved, queued) {
     const pillLabel = root && root.querySelector('[data-engram-pill-label]');
     const footer    = root && root.querySelector('[data-engram-footer]');
-    if (pillLabel) pillLabel.textContent = 'Engram \xb7 ' + saved + ' saved';
-    if (footer)    footer.textContent    = saved + ' saved \xb7 ' + queued + ' queued';
+    if (pillLabel && !_pillShowsJobTitle) {
+      pillLabel.textContent = 'Engram \xb7 ' + saved + ' saved ▸';
+    }
+    if (footer) footer.textContent = saved + ' saved \xb7 ' + queued + ' queued';
   }
 
   async function refreshSavedCount(root) {
@@ -116,21 +132,17 @@ console.log('[Engram] LinkedIn widget script loaded');
       if (pillView) pillView.style.display = 'flex';
       if (cardView) cardView.style.display = 'none';
       Object.assign(root.style, {
-        padding:      '7px 11px',
         width:        'auto',
         minWidth:     '0',
         borderRadius: '16px',
-        gap:          '0',
       });
     } else {
       if (pillView) pillView.style.display = 'none';
       if (cardView) cardView.style.display = 'flex';
       Object.assign(root.style, {
-        padding:      '10px 11px',
         width:        '252px',
         minWidth:     '252px',
         borderRadius: '16px',
-        gap:          '8px',
       });
     }
     storageSet({ [COLLAPSED_KEY]: collapsed });
@@ -139,9 +151,10 @@ console.log('[Engram] LinkedIn widget script loaded');
   // ── Widget info update (title change without full re-inject) ──────────────────
 
   function updateWidgetInfo(widget, job) {
-    const avatarEl = widget.querySelector('[data-engram-avatar]');
-    const titleEl  = widget.querySelector('[data-engram-title]');
-    const metaEl   = widget.querySelector('[data-engram-meta]');
+    const avatarEl  = widget.querySelector('[data-engram-avatar]');
+    const titleEl   = widget.querySelector('[data-engram-title]');
+    const metaEl    = widget.querySelector('[data-engram-meta]');
+    const pillLabel = widget.querySelector('[data-engram-pill-label]');
     if (!titleEl) return;
     const newTitle = (job && job.title) || 'LinkedIn job page detected';
     if (titleEl.textContent === newTitle) return;
@@ -157,51 +170,89 @@ console.log('[Engram] LinkedIn widget script loaded');
       metaEl.style.display = meta ? '' : 'none';
     }
     if (avatarEl && job) fillAvatar(avatarEl, job);
+    if (pillLabel && job && job.title) {
+      _pillShowsJobTitle    = true;
+      pillLabel.textContent = _pillText(job, 0);
+    }
   }
 
-  // ── Widget drag ───────────────────────────────────────────────────────────────
+  // ── Widget drag — pointer events, mirrors AI widget pattern ──────────────────
+  //
+  // Tracks dragMoved to distinguish click from drag.
+  // On pointerup without movement: toggle collapsed state.
+  //   collapsed  → expand (any area)
+  //   expanded   → collapse only if click was on header (not card body or buttons)
+  // Buttons return early from pointerdown so their clicks always fire normally.
 
   function makeDraggable(root) {
-    let dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+    let dragging  = false;
+    let dragMoved = false;
+    let startX    = 0, startY = 0, startLeft = 0, startTop = 0;
+    let clickTgt  = null;
 
-    function anchorToLeftTop() {
-      const r = root.getBoundingClientRect();
+    root.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      clickTgt  = e.target;
+      root.setPointerCapture(e.pointerId);
+      dragging  = true;
+      dragMoved = false;
+      const rect = root.getBoundingClientRect();
+      startLeft  = rect.left;
+      startTop   = rect.top;
+      startX     = e.clientX;
+      startY     = e.clientY;
       root.style.right  = 'auto';
       root.style.bottom = 'auto';
-      root.style.left   = r.left + 'px';
-      root.style.top    = r.top  + 'px';
-    }
-
-    root.addEventListener('mousedown', (e) => {
-      if (e.target.closest && e.target.closest('button')) return;
-      dragging  = true;
-      anchorToLeftTop();
-      startX    = e.clientX;
-      startY    = e.clientY;
-      startLeft = parseFloat(root.style.left) || 0;
-      startTop  = parseFloat(root.style.top)  || 0;
+      root.style.left   = rect.left + 'px';
+      root.style.top    = rect.top  + 'px';
       root.style.cursor = 'grabbing';
       e.preventDefault();
     });
 
-    document.addEventListener('mousemove', (e) => {
+    root.addEventListener('pointermove', (e) => {
       if (!dragging) return;
-      let nx = startLeft + (e.clientX - startX);
-      let ny = startTop  + (e.clientY - startY);
-      nx = Math.max(0, Math.min(window.innerWidth  - root.offsetWidth,  nx));
-      ny = Math.max(0, Math.min(window.innerHeight - root.offsetHeight, ny));
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!dragMoved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) dragMoved = true;
+      const nx = Math.max(0, Math.min(window.innerWidth  - root.offsetWidth,  startLeft + dx));
+      const ny = Math.max(0, Math.min(window.innerHeight - root.offsetHeight, startTop  + dy));
       root.style.left = nx + 'px';
       root.style.top  = ny + 'px';
     });
 
-    document.addEventListener('mouseup', () => {
+    root.addEventListener('pointerup', () => {
       if (!dragging) return;
       dragging = false;
       root.style.cursor = 'grab';
-      storageSet({ [POSITION_KEY]: {
-        left: parseFloat(root.style.left) || 0,
-        top:  parseFloat(root.style.top)  || 0,
-      }});
+
+      if (dragMoved) {
+        storageSet({ [POSITION_KEY]: {
+          left: parseFloat(root.style.left) || 0,
+          top:  parseFloat(root.style.top)  || 0,
+        }});
+      } else {
+        // Simple click (no movement): toggle based on state
+        if (isCollapsed) {
+          applyCollapsed(root, false);
+        } else {
+          // Only collapse if the click was on the header, not the card body
+          const inBody = clickTgt && clickTgt.closest('[data-engram-card-body]');
+          if (!inBody) applyCollapsed(root, true);
+        }
+      }
+    });
+
+    root.addEventListener('pointercancel', () => {
+      dragging = false;
+      root.style.cursor = 'grab';
+    });
+
+    window.addEventListener('resize', () => {
+      if (!root.style.left) return;
+      const nx = Math.max(0, Math.min(window.innerWidth  - root.offsetWidth,  parseFloat(root.style.left) || 0));
+      const ny = Math.max(0, Math.min(window.innerHeight - root.offsetHeight, parseFloat(root.style.top)  || 0));
+      root.style.left = nx + 'px';
+      root.style.top  = ny + 'px';
     });
   }
 
@@ -212,6 +263,7 @@ console.log('[Engram] LinkedIn widget script loaded');
     if (old) old.remove();
 
     const logoImgUrl = (isFirefox ? browser : chrome).runtime.getURL('assets/engram-icon.png');
+    _pillShowsJobTitle = !!(job && job.title);
 
     const root = document.createElement('div');
     root.id = WIDGET_ID;
@@ -237,31 +289,33 @@ console.log('[Engram] LinkedIn widget script loaded');
       lineHeight:           '1.4',
       cursor:               'grab',
       opacity:              '0.85',
+      overflow:             'hidden',
       transition:           'opacity 0.2s',
       ...basePos,
     });
 
-    // ── Helper: Engram logo img ───────────────────────────────────────────────
     function makeLogoImg(size) {
       const img = document.createElement('img');
       img.src = logoImgUrl;
       Object.assign(img.style, {
         width: size + 'px', height: size + 'px',
-        objectFit: 'contain', flexShrink: '0',
+        objectFit: 'contain', flexShrink: '0', display: 'block',
       });
       img.onerror = function () { this.style.display = 'none'; };
       return img;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // PILL VIEW (collapsed)
+    // PILL VIEW (collapsed) — entire row is clickable via pointerup handler
     // ══════════════════════════════════════════════════════════════════════════
     const pillView = document.createElement('div');
     pillView.setAttribute('data-engram-pill', '');
     Object.assign(pillView.style, {
-      display: 'none',   // overridden by applyCollapsed
+      display:    'none',   // overridden by applyCollapsed
       alignItems: 'center',
-      gap: '6px',
+      gap:        '5px',
+      padding:    '7px 11px',
+      whiteSpace: 'nowrap',
     });
 
     pillView.appendChild(makeLogoImg(13));
@@ -269,29 +323,14 @@ console.log('[Engram] LinkedIn widget script loaded');
     const pillLabel = document.createElement('span');
     pillLabel.setAttribute('data-engram-pill-label', '');
     Object.assign(pillLabel.style, {
-      fontSize:      '11.5px',
-      fontWeight:    '600',
-      color:         '#c4b5fd',
+      fontSize:      '11px',
+      fontWeight:    '750',
+      color:         '#a881fe',
       whiteSpace:    'nowrap',
       letterSpacing: '0.1px',
     });
-    pillLabel.textContent = 'Engram';
-
-    const pillExpandBtn = document.createElement('button');
-    pillExpandBtn.textContent = '▶';
-    pillExpandBtn.title = 'Expand';
-    Object.assign(pillExpandBtn.style, {
-      background: 'none', border: 'none',
-      color: '#5f5f68', cursor: 'pointer',
-      fontSize: '8px', padding: '1px 2px',
-      lineHeight: '1', fontFamily: 'inherit',
-    });
-    pillExpandBtn.addEventListener('mouseenter', () => { pillExpandBtn.style.color = '#a78bfa'; });
-    pillExpandBtn.addEventListener('mouseleave', () => { pillExpandBtn.style.color = '#5f5f68'; });
-    pillExpandBtn.addEventListener('click', () => applyCollapsed(root, false));
-
+    pillLabel.textContent = _pillText(job, 0);
     pillView.appendChild(pillLabel);
-    pillView.appendChild(pillExpandBtn);
 
     // ══════════════════════════════════════════════════════════════════════════
     // CARD VIEW (expanded)
@@ -299,48 +338,62 @@ console.log('[Engram] LinkedIn widget script loaded');
     const cardView = document.createElement('div');
     cardView.setAttribute('data-engram-card', '');
     Object.assign(cardView.style, {
-      display: 'none',    // overridden by applyCollapsed
+      display:       'none',   // overridden by applyCollapsed
       flexDirection: 'column',
-      gap: '8px',
     });
 
-    // ── Card header ──────────────────────────────────────────────────────────
+    // ── Card header — clicking anywhere on header collapses (via pointerup) ───
     const headerRow = document.createElement('div');
     Object.assign(headerRow.style, {
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      display:        'flex',
+      justifyContent: 'space-between',
+      alignItems:     'center',
+      padding:        '8px 10px 6px',
+      borderBottom:   '1px solid rgba(245,245,245,0.10)',
     });
 
     const headerBrand = document.createElement('div');
     Object.assign(headerBrand.style, {
-      display: 'flex', alignItems: 'center', gap: '5px',
-      fontWeight: '700', fontSize: '12px', color: '#a78bfa', letterSpacing: '0.3px',
+      display: 'flex', alignItems: 'center', gap: '4px',
+      fontWeight: '750', fontSize: '11px', color: '#a881fe',
     });
-    headerBrand.appendChild(makeLogoImg(14));
+    headerBrand.appendChild(makeLogoImg(13));
     const headerLabel = document.createElement('span');
     headerLabel.textContent = 'Engram';
     headerBrand.appendChild(headerLabel);
 
     const collapseBtn = document.createElement('button');
-    collapseBtn.textContent = '▾';
+    collapseBtn.textContent = '−';  // − same as AI widget
     collapseBtn.title = 'Collapse';
     Object.assign(collapseBtn.style, {
       background: 'none', border: 'none',
-      color: '#5f5f68', cursor: 'pointer',
-      fontSize: '14px', padding: '0 2px',
+      color: '#aeaeae', cursor: 'pointer',
+      fontSize: '16px', padding: '0 2px',
       lineHeight: '1', fontFamily: 'inherit',
+      transition: 'color 0.15s',
     });
-    collapseBtn.addEventListener('mouseenter', () => { collapseBtn.style.color = '#a78bfa'; });
-    collapseBtn.addEventListener('mouseleave', () => { collapseBtn.style.color = '#5f5f68'; });
+    collapseBtn.addEventListener('mouseenter', () => { collapseBtn.style.color = '#a881fe'; });
+    collapseBtn.addEventListener('mouseleave', () => { collapseBtn.style.color = '#aeaeae'; });
     collapseBtn.addEventListener('click', () => applyCollapsed(root, true));
 
     headerRow.appendChild(headerBrand);
     headerRow.appendChild(collapseBtn);
 
+    // ── Card body — marked so pointerup skips toggle when clicking body ───────
+    const cardBody = document.createElement('div');
+    cardBody.setAttribute('data-engram-card-body', '');
+    Object.assign(cardBody.style, {
+      display:       'flex',
+      flexDirection: 'column',
+      gap:           '7px',
+      padding:       '8px 10px 10px',
+    });
+
     // ── Info block ───────────────────────────────────────────────────────────
     const infoBlock = document.createElement('div');
     Object.assign(infoBlock.style, {
       display: 'flex', alignItems: 'center', gap: '9px',
-      paddingBottom: '8px', borderBottom: '1px solid rgba(245,245,245,0.10)',
+      paddingBottom: '7px', borderBottom: '1px solid rgba(245,245,245,0.08)',
       overflow: 'hidden',
     });
 
@@ -395,9 +448,9 @@ console.log('[Engram] LinkedIn widget script loaded');
     infoBlock.appendChild(avatarEl);
     infoBlock.appendChild(infoText);
 
-    // ── Buttons ──────────────────────────────────────────────────────────────
-    const saveBtn   = makeBtn('\u{1F4BE} Save Job',     '#6d28d9', '#fff');
-    const promptBtn = makeBtn('⬡ Copy AI Prompt',  'rgba(255,255,255,0.05)', '#a78bfa', '1px solid rgba(245,245,245,0.12)');
+    // ── Action buttons ────────────────────────────────────────────────────────
+    const saveBtn   = makeBtn('\u{1F4BE} Save Job',    '#6d28d9', '#fff');
+    const promptBtn = makeBtn('⬡ Copy AI Prompt', 'rgba(255,255,255,0.05)', '#a78bfa', '1px solid rgba(245,245,245,0.12)');
 
     // ── Status line ──────────────────────────────────────────────────────────
     const statusLine = document.createElement('div');
@@ -411,20 +464,23 @@ console.log('[Engram] LinkedIn widget script loaded');
     footer.setAttribute('data-engram-footer', '');
     Object.assign(footer.style, {
       fontSize: '9.5px', color: '#6f6f78', textAlign: 'center',
-      paddingTop: '4px', borderTop: '1px solid rgba(245,245,245,0.10)', letterSpacing: '0.2px',
+      paddingTop: '4px', borderTop: '1px solid rgba(245,245,245,0.08)',
+      letterSpacing: '0.2px',
     });
     footer.textContent = '— saved';
 
     // ── Wire up button actions ────────────────────────────────────────────────
-    saveBtn.addEventListener('click', () => doSaveJob(currentJob, statusLine, saveBtn, root));
+    saveBtn.addEventListener('click',   () => doSaveJob(currentJob, statusLine, saveBtn, root));
     promptBtn.addEventListener('click', () => doCopyPrompt(currentJob, statusLine));
 
+    cardBody.appendChild(infoBlock);
+    cardBody.appendChild(saveBtn);
+    cardBody.appendChild(promptBtn);
+    cardBody.appendChild(statusLine);
+    cardBody.appendChild(footer);
+
     cardView.appendChild(headerRow);
-    cardView.appendChild(infoBlock);
-    cardView.appendChild(saveBtn);
-    cardView.appendChild(promptBtn);
-    cardView.appendChild(statusLine);
-    cardView.appendChild(footer);
+    cardView.appendChild(cardBody);
 
     root.appendChild(pillView);
     root.appendChild(cardView);
@@ -436,8 +492,6 @@ console.log('[Engram] LinkedIn widget script loaded');
     root.addEventListener('mouseleave', () => { root.style.opacity = '0.85'; });
 
     document.body.appendChild(root);
-
-    // Populate count labels after inject
     refreshSavedCount(root);
   }
 
@@ -540,7 +594,7 @@ console.log('[Engram] LinkedIn widget script loaded');
       '\n\n---\n_Captured by Engram \xb7 ' + ts + '_\n';
   }
 
-  // ── Logo data-URL resolution (CDN URLs are referrer-restricted from extension pages) ──
+  // ── Logo data-URL resolution ──────────────────────────────────────────────────
 
   async function resolveLogoDataUrl(cdnUrl) {
     if (!cdnUrl || cdnUrl.startsWith('data:')) return cdnUrl;
@@ -566,7 +620,7 @@ console.log('[Engram] LinkedIn widget script loaded');
       cache[key]      = {
         company:          job.company,
         companyLogoUrl:   dataUrl,
-        companyInitials:  job.companyInitials || job.company.slice(0,1).toUpperCase(),
+        companyInitials:  job.companyInitials || job.company.slice(0, 1).toUpperCase(),
         updatedAt:        Date.now(),
       };
       await storageSet({ engramCompanyLogoCache: cache });
@@ -594,7 +648,6 @@ console.log('[Engram] LinkedIn widget script loaded');
 
   async function checkAndRender() {
     try {
-      // Check global enable setting
       let enabled = true;
       try {
         const s = await storageGet(SETTINGS_KEY);
@@ -613,7 +666,6 @@ console.log('[Engram] LinkedIn widget script loaded');
       const url      = window.location.href;
       const existing = document.getElementById(WIDGET_ID);
 
-      // URL changed — remove stale widget and re-evaluate
       if (existing && url !== lastRenderedUrl) existing.remove();
 
       if (!window.__engramJobs.detectJobPage()) {
@@ -621,13 +673,11 @@ console.log('[Engram] LinkedIn widget script loaded');
         return;
       }
 
-      // Extract job data
       const job = typeof window.__engramJobs.extractJob === 'function'
         ? window.__engramJobs.extractJob()
         : null;
       currentJob = job;
 
-      // Resolve CDN logo → data URL so archive page can display it
       if (job && job.companyLogoUrl && !job.companyLogoUrl.startsWith('data:') &&
           job.sourceJobId && job.sourceJobId !== _resolvedLogoJobId) {
         _resolvedLogoJobId = job.sourceJobId;
@@ -649,7 +699,6 @@ console.log('[Engram] LinkedIn widget script loaded');
         return;
       }
 
-      // Load position and collapsed state
       let savedPos = null;
       let startCollapsed = isCollapsed;
       try {

@@ -337,11 +337,47 @@
     refreshQueuedBadge();
   }
 
+  // ── Copy AI Prompt ─────────────────────────────────────────────────────────
+
+  async function copyPrompt() {
+    var bar  = document.getElementById('statusBar');
+    var jobs = allJobs.filter(function (j) { return j.queued !== false; });
+
+    if (!allJobs.length) {
+      setStatus(bar, 'No saved jobs. Use the widget on LinkedIn pages.', '');
+      return;
+    }
+    if (!jobs.length) {
+      setStatus(bar, 'Select at least one job to copy the prompt.', '#f59e0b');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(buildMultiJobPrompt(jobs));
+      setStatus(bar, '✓ AI prompt copied — paste it into ChatGPT or Claude', '#22c55e');
+    } catch (_) {
+      setStatus(bar, 'Clipboard blocked — try a different browser or context', '#ef4444');
+    }
+  }
+
+  // ── Open AI ────────────────────────────────────────────────────────────────
+
+  function openChatGPT() {
+    window.open('https://chatgpt.com', '_blank', 'noopener,noreferrer');
+  }
+
+  function openClaude() {
+    window.open('https://claude.ai', '_blank', 'noopener,noreferrer');
+  }
+
   // ── Event listeners ─────────────────────────────────────────────────────────
 
   document.getElementById('btnSelectAll').addEventListener('click', selectAll);
   document.getElementById('btnDeselectAll').addEventListener('click', deselectAll);
   document.getElementById('btnBuildPackage').addEventListener('click', buildPackage);
+  document.getElementById('btnCopyPrompt').addEventListener('click', copyPrompt);
+  document.getElementById('btnOpenChatGPT').addEventListener('click', openChatGPT);
+  document.getElementById('btnOpenClaude').addEventListener('click', openClaude);
 
   init();
 
