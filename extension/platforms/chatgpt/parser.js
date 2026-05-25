@@ -906,8 +906,16 @@
     const scanMode = msg.mode || "interactive";
     _dbg("ENGRAM_START_SCAN received", { mode: scanMode, url: location.href, chatId: getChatId() });
     const response = Promise.resolve()
-      .then(() => performScan(scanMode))
+      .then(() => {
+        _wIsScanning = true;
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
+        return performScan(scanMode);
+      })
       .then((result) => {
+        _wIsScanning = false;
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
         console.log(
           "[Engram][ChatGPT] sending messages to background:",
           `total=${result.total}`,
@@ -921,6 +929,9 @@
         return result;
       })
       .catch((err) => {
+        _wIsScanning = false;
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
         console.error("[Engram][ChatGPT] background send failed:", err.message || String(err));
         return {
           type: "ENGRAM_SCAN_COMPLETE",
@@ -971,6 +982,7 @@
   let _wDragStartY  = 0;
   let _wDragElX     = 0;
   let _wDragElY     = 0;
+  let _wIsScanning  = false;
   let _wClickTarget = null;
   let _wRafId       = null;
   const _wMargin    = 8;
@@ -1071,28 +1083,14 @@
   }
 
   function _wLiveStats() {
-    const msgs = extractMessages();    // ChatGPT: extractMessages() not captureDomMessages()
-    const total = msgs.length;
-    if (!total) return { mode: "empty", hasData: false };
-
-    const user   = msgs.filter(m => m.role === "user").length;
-    const ai     = msgs.filter(m => m.role === "assistant").length;
-    const code   = msgs.flatMap(m => m.codeBlocks || []).length;
-    const status = _wLiveStatus(total, code);
-
-    return {
-      mode:     "live",
-      hasData:  true,
-      total, user, ai, code,
-      label:    status.label,
-      color:    status.color,
-      source:   "Visible chat activity",
-      accuracy: "Estimated",
-      hint:     "Full scan creates handoff-ready report.",
-    };
+    // ChatGPT virtualizes the DOM: visible node count is far lower than the real
+    // message count for heavy chats. Never derive health from DOM nodes alone —
+    // show a neutral "scan needed" prompt instead of a misleading health label.
+    return { mode: "scan-needed", hasData: true };
   }
 
   function _wStats() {
+    if (_wIsScanning) return { mode: "scanning", hasData: true };
     const exactSnapshot = _wFindExactSnapshot();
     if (!exactSnapshot) return _wLiveStats();
 
@@ -1136,6 +1134,52 @@
         "</div>" +
         "<div class='ew-body'>" +
           "<div class='ew-hint ew-hint-expanded'>No readable chat data yet.</div>" +
+        "</div>";
+      _wEl.querySelector(".ew-close").onclick = _wToggle;
+      return;
+    }
+
+    if (st.mode === "scanning" && _wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>Scanning&#x2026;</span>" +
+        "</div>";
+      return;
+    }
+
+    if (st.mode === "scanning") {
+      _wEl.innerHTML =
+        "<div class='ew-head'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+        "</div>" +
+        "<div class='ew-body'>" +
+          "<div class='ew-hint ew-hint-expanded'>Scan in progress&#x2026;</div>" +
+        "</div>";
+      _wEl.querySelector(".ew-close").onclick = _wToggle;
+      return;
+    }
+
+    if (st.mode === "scan-needed" && _wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact' title='Click Scan Chat in the Engram popup for accurate results'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>Scan needed</span>" +
+        "</div>";
+      return;
+    }
+
+    if (st.mode === "scan-needed") {
+      _wEl.innerHTML =
+        "<div class='ew-head'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+        "</div>" +
+        "<div class='ew-body'>" +
+          "<div class='ew-hint ew-hint-expanded'>Click <b>Scan Chat</b> in the Engram popup for accurate health and message count.</div>" +
         "</div>";
       _wEl.querySelector(".ew-close").onclick = _wToggle;
       return;
@@ -1427,6 +1471,7 @@
     _chatDirty              = false; // new chat starts clean; MO re-arms automatically
     _snapshotBaselineAt     = null;  // reset so dirty observer ignores initial hydration
     if (_freshSnapInFlight) { _freshSnapInFlight.cancel(); _freshSnapInFlight = null; }
+    _wIsScanning = false;
     _wLastKey = "";
     console.log(
       "[Engram][ChatGPT] SPA navigation detected",
