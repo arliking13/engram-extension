@@ -26,12 +26,14 @@
 }
 
 html {
+  overflow-x: hidden;
   scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: hidden;
   color: var(--color-lunar-surface);
   background:
     radial-gradient(circle at calc(58% + (var(--pointer-x) * 10%)) calc(10% + (var(--pointer-y) * 8%)), rgba(168, 129, 254, 0.16), transparent 28rem),
@@ -46,6 +48,12 @@ a {
 
 button {
   font: inherit;
+}
+
+img,
+svg,
+iframe {
+  max-width: 100%;
 }
 
 .site-header {
@@ -979,6 +987,8 @@ h1 {
   width: min(calc(100% - 40px), var(--page-max));
   margin: 0 auto;
   padding: 48px 0;
+  content-visibility: auto;
+  contain-intrinsic-size: 680px;
 }
 
 .hackathon-fit-section {
@@ -2555,11 +2565,14 @@ h3 {
   width: 100%;
   max-width: 1000px;
   margin: 0 auto;
-  padding-bottom: 56.25%; /* 16:9 */
+  aspect-ratio: 16 / 9;
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(168, 129, 254, 0.20);
-  box-shadow: 0 4px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(245, 245, 245, 0.04);
+  background:
+    radial-gradient(circle at 50% 20%, rgba(168, 129, 254, 0.14), transparent 45%),
+    rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(245, 245, 245, 0.04);
 }
 
 .video-wrap iframe {
@@ -2655,15 +2668,124 @@ h3 {
   }
 }
 
+@media (max-width: 760px), (pointer: coarse) {
+  body {
+    background:
+      radial-gradient(circle at 50% 0%, rgba(168, 129, 254, 0.13), transparent 22rem),
+      linear-gradient(180deg, var(--color-deep-space), var(--color-midnight-ink) 24rem, var(--color-deep-space));
+  }
+
+  .site-header {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(0, 0, 0, 0.9);
+  }
+
+  .header-links {
+    gap: 8px;
+  }
+
+  .hero {
+    display: grid;
+    min-height: auto;
+    padding-bottom: 42px;
+  }
+
+  .hero-content {
+    order: 1;
+  }
+
+  .hero-scene {
+    position: relative;
+    order: 2;
+    inset: auto;
+    min-height: 0;
+    margin-top: 28px;
+    overflow: visible;
+  }
+
+  .hero-scene::before,
+  .scene-grid {
+    animation: none;
+  }
+
+  .hero-scene::before {
+    inset: -18px;
+    opacity: 0.2;
+  }
+
+  .scene-grid {
+    opacity: 0.18;
+    mask-image: linear-gradient(180deg, black, transparent 78%);
+  }
+
+  .scene-orbit {
+    display: none;
+  }
+
+  .product-console {
+    position: relative;
+    inset: auto;
+    right: auto;
+    bottom: auto;
+    width: min(100%, 390px);
+    margin: 0 auto;
+    --product-transform: none;
+    transform: none;
+    animation: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: rgba(168, 129, 254, 0.12) 0 0 24px;
+  }
+
+  .product-console:hover,
+  .card:hover,
+  .workflow li:hover,
+  .demo-flow span:hover,
+  .button:hover,
+  .popup-primary:hover,
+  .cta-panel:hover,
+  .solution-strip:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .hero-content .badge,
+  .hero-content .hero-brand-icon,
+  .hero-content .eyebrow,
+  .hero-content h1,
+  .hero-content .hero-line,
+  .hero-content .hero-copy,
+  .hero-content .hero-actions,
+  .hero-content .compatible-row,
+  .hero-content .support-note,
+  .hero-content .creator-links,
+  .icon-dot.violet,
+  .popup-status,
+  .ew-row-compact {
+    animation: none;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .button {
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 620px) {
   .site-header {
     width: min(calc(100% - 20px), var(--page-max));
     height: 58px;
+    padding: 0 10px;
   }
 
-  .brand-logo {
-    width: 112px;
-    height: 30px;
+  .brand {
+    min-width: 0;
   }
 
   .button-ghost {
@@ -2675,25 +2797,24 @@ h3 {
   }
 
   .hero {
-    min-height: 900px;
-    padding: 92px 18px 58px;
+    padding: 88px 16px 44px;
   }
 
   h1 {
-    font-size: clamp(48px, 18vw, 76px);
+    font-size: clamp(42px, 15vw, 64px);
   }
 
   .hero-line {
-    font-size: clamp(24px, 8vw, 34px);
+    font-size: clamp(22px, 7vw, 30px);
   }
 
   .hero-copy {
-    font-size: 16px;
+    font-size: 15.5px;
+    line-height: 1.55;
   }
 
   .product-console {
-    bottom: 34px;
-    width: min(420px, calc(100% - 28px));
+    width: 100%;
   }
 
   .mini-chip {
@@ -2704,13 +2825,14 @@ h3 {
   }
 
   .section {
-    width: min(calc(100% - 28px), var(--page-max));
-    padding: 38px 0;
+    width: min(calc(100% - 32px), var(--page-max));
+    padding: 34px 0;
+    contain-intrinsic-size: 620px;
   }
 
   .linkedin-flow-section {
-    width: min(calc(100% - 28px), var(--page-max));
-    padding: 34px 16px;
+    width: min(calc(100% - 32px), var(--page-max));
+    padding: 30px 16px;
   }
 
   .pain-card,
@@ -2719,7 +2841,56 @@ h3 {
   .privacy-card,
   .platform-card,
   .cta-panel {
-    padding: 20px;
+    padding: 18px;
+  }
+
+  .section-heading p,
+  .privacy-card p,
+  .platform-card p,
+  .cta-panel p,
+  .preview-card p,
+  .workflow p,
+  .solution-strip span {
+    font-size: 15px;
+    line-height: 1.58;
+  }
+
+  h2 {
+    font-size: clamp(25px, 8vw, 34px);
+  }
+
+  h3 {
+    font-size: 17px;
+  }
+
+  .hero-actions,
+  .cta-panel .hero-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .hero-actions .button,
+  .cta-panel .button {
+    width: 100%;
+  }
+
+  .compatible-row,
+  .support-note,
+  .creator-links,
+  .built-by,
+  .footer-links {
+    align-items: stretch;
+  }
+
+  .platform-chip,
+  .support-note span {
+    max-width: 100%;
+  }
+
+  .video-wrap {
+    border-radius: 14px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.38);
   }
 
   .stats-grid,
@@ -2753,13 +2924,86 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .popup-package-card div,
+  .popup-secondary-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .popup-package-card button + button,
+  .popup-secondary-actions button + button {
+    border-left: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .linkedin-page-shell {
+    min-height: auto;
+  }
+
   .site-footer {
+    width: min(calc(100% - 32px), var(--page-max));
     display: grid;
     gap: 8px;
   }
 
   .footer-links {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 420px) {
+  .site-header {
+    border-radius: 0 0 12px 12px;
+  }
+
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+  }
+
+  .brand-name {
+    font-size: 14px;
+  }
+
+  .hero-brand-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .badge {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .popup-preview {
+    padding: 12px;
+  }
+
+  .popup-gauge-wrap {
+    width: 164px;
+    height: 88px;
+  }
+
+  .popup-gauge-svg {
+    width: 164px;
+    height: 91px;
+  }
+
+  .popup-stats strong {
+    font-size: 16px;
+  }
+
+  .pain-card,
+  .use-card,
+  .feature-card,
+  .submission-card,
+  .tech-card,
+  .criteria-card,
+  .preview-card,
+  .job-mock-card,
+  .mvp-includes,
+  .demo-links {
+    padding: 16px;
   }
 }
 

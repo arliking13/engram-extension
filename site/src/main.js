@@ -1,6 +1,9 @@
 const root = document.documentElement;
 const cards = document.querySelectorAll("[data-tilt]");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const mobileViewport = window.matchMedia("(max-width: 760px)");
+const finePointer = window.matchMedia("(pointer: fine)");
+const fullMotion = !reducedMotion.matches && !mobileViewport.matches && finePointer.matches;
 
 const HEALTH_BANDS = [
   { min: 90, label: "Safe", color: "#22c55e" },
@@ -37,13 +40,44 @@ document.querySelectorAll("[data-health-score]").forEach((card) => {
   if (status) status.textContent = health.label;
 });
 
-if (!reducedMotion.matches) {
+function loadDeferredVideo(frame) {
+  if (!frame || frame.src || !frame.dataset.src) return;
+  frame.src = frame.dataset.src;
+}
+
+document.querySelectorAll("iframe[data-src]").forEach((frame) => {
+  if (!("IntersectionObserver" in window)) {
+    loadDeferredVideo(frame);
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        loadDeferredVideo(frame);
+        observer.disconnect();
+      });
+    },
+    { rootMargin: "420px 0px", threshold: 0.01 }
+  );
+
+  observer.observe(frame);
+});
+
+if (fullMotion) {
+  let pointerFrame = 0;
+
   window.addEventListener("pointermove", (event) => {
-    const x = event.clientX / window.innerWidth - 0.5;
-    const y = event.clientY / window.innerHeight - 0.5;
-    root.style.setProperty("--pointer-x", x.toFixed(3));
-    root.style.setProperty("--pointer-y", y.toFixed(3));
-  });
+    if (pointerFrame) return;
+    pointerFrame = window.requestAnimationFrame(() => {
+      pointerFrame = 0;
+      const x = event.clientX / window.innerWidth - 0.5;
+      const y = event.clientY / window.innerHeight - 0.5;
+      root.style.setProperty("--pointer-x", x.toFixed(3));
+      root.style.setProperty("--pointer-y", y.toFixed(3));
+    });
+  }, { passive: true });
 
   cards.forEach((card) => {
     card.addEventListener("pointermove", (event) => {
@@ -52,7 +86,7 @@ if (!reducedMotion.matches) {
       const y = ((event.clientY - rect.top) / rect.height - 0.5) * -8;
       card.style.setProperty("--tilt-x", `${y.toFixed(2)}deg`);
       card.style.setProperty("--tilt-y", `${x.toFixed(2)}deg`);
-    });
+    }, { passive: true });
 
     card.addEventListener("pointerleave", () => {
       card.style.setProperty("--tilt-x", "0deg");
@@ -70,7 +104,7 @@ revealItems.forEach((item, index) => {
   item.style.setProperty("--reveal-delay", `${Math.min(index % 8, 5) * 55}ms`);
 });
 
-if (reducedMotion.matches || !("IntersectionObserver" in window)) {
+if (reducedMotion.matches || mobileViewport.matches || !("IntersectionObserver" in window)) {
   revealItems.forEach((item) => item.classList.add("is-visible"));
 } else {
   const observer = new IntersectionObserver(
