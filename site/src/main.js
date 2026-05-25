@@ -62,7 +62,7 @@ if (!reducedMotion.matches) {
 }
 
 const revealItems = document.querySelectorAll(
-  ".section-heading, .card, .solution-strip, .workflow li, .demo-flow span, .linkedin-step, .job-mock-card, .privacy-card, .platform-card, .cta-panel"
+  ".section-heading, .card, .solution-strip, .workflow li, .demo-flow span, .linkedin-step, .job-mock-card, .continuity-bridge, .privacy-card, .platform-card, .cta-panel"
 );
 
 revealItems.forEach((item, index) => {
