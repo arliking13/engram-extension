@@ -21,17 +21,44 @@
 
   const ENGRAM_WIDGET_ID       = "engram-mini-health-widget";
   const ENGRAM_WIDGET_STYLE_ID = "engram-mini-health-style";
+  const CHATGPT_BRIDGE_SOURCE  = "engram-chatgpt-bridge";
+  const CHATGPT_BRIDGE_EVENT   = "conversation-snapshot";
+  const CHATGPT_LEGACY_EVENT   = "ENGRAM_CHATGPT_DATA_LAYER";
+  const CHATGPT_SESSION_KEY    = "engramChatgptLatestSnapshot";
+  const CHATGPT_PAGE_SESSION_KEY = "engram:chatgpt:conversationSnapshot";
+  const CHATGPT_SESSION_LIMIT  = 2 * 1024 * 1024;
+
+  let latestDataLayerSnapshot  = null;
+  let latestBGNetworkSnapshot  = null;
+  let _chatDirty               = false; // true when DOM has new messages since last accepted snapshot
+  let _snapshotBaselineAt      = null;  // capturedAt of last accepted snapshot for current chat
+  let _freshSnapInFlight       = null;  // { chatId, promise, cancel } | null — deduped in-flight fetch
 
   console.log("[Engram][ChatGPT] parser loaded");
+  // Startup diagnostic: always logged so about:debugging confirms injection
+  {
+    const _startChatId = (location.pathname.match(/\/c\/([a-z0-9-]+)/i) || [])[1] || "none";
+    const _startPage   = _startChatId !== "none" ? "conversation" : "other";
+    console.log(
+      "[Engram][ChatGPT] startup",
+      "href=" + location.href,
+      "chatId=" + _startChatId,
+      "page=" + _startPage
+    );
+  }
+
+  // Debug flag — set to true locally to enable verbose scan diagnostics.
+  // Must remain false in committed code to avoid console spam.
+  const ENGRAM_DEBUG_CHATGPT = false;
+  function _dbg(...args) { if (ENGRAM_DEBUG_CHATGPT) console.log("[Engram][ChatGPT][debug]", ...args); }
 
   // ── Text helpers ──────────────────────────────────────────────────────────
 
-  function normalizeText(text) {
-    return (text || "").replace(/\s+/g, " ").trim();
-  }
-
-  function isMeaningful(text) {
-    return normalizeText(text).length >= 2;
+  function isVisibleRoleNode(node) {
+    if (node.getAttribute("aria-hidden") === "true") return false;
+    if (node.closest("[aria-hidden='true']")) return false;
+    if (typeof node.getClientRects === "function" && node.getClientRects().length === 0) return false;
+    return true;
   }
 
   // Single-word / short-phrase button labels that appear in ChatGPT action
@@ -71,6 +98,246 @@
     }).filter((b) => b.code.length > 0);
   }
 
+  function extractCodeBlocksFromText(text) {
+    const blocks = [];
+    const re = /```([^\n`]*)\n?([\s\S]*?)```/g;
+    let match;
+    while ((match = re.exec(text || ""))) {
+      const code = (match[2] || "").trim();
+      if (!code) continue;
+      blocks.push({
+        language: (match[1] || "unknown").trim() || "unknown",
+        code,
+      });
+    }
+    return blocks;
+  }
+
+  // â”€â”€ ChatGPT data-layer bridge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //
+  // ChatGPT virtualizes conversation DOM while scrolling. To avoid moving the
+  // user's viewport, Engram also listens for conversation JSON already fetched
+  // by the page. If the page data is unavailable, scan falls back to mounted
+  // visible DOM nodes.
+
+  function normalizeBridgeMessages(rawMessages) {
+    if (!Array.isArray(rawMessages)) return [];
+
+    return rawMessages
+      .map((msg) => {
+        const role = msg?.role === "assistant" ? "assistant" : msg?.role === "user" ? "user" : "";
+        if (!role) return null;
+        const text = typeof msg.text === "string" ? msg.text : "";
+        return {
+          role,
+          text,
+          codeBlocks: Array.isArray(msg.codeBlocks) ? msg.codeBlocks : extractCodeBlocksFromText(text),
+          timestamp: msg.timestamp || Date.now(),
+          platform: "chatgpt",
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function snapshotMatchesCurrentChat(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.messages) || !snapshot.messages.length) return false;
+
+    const currentChatId = getChatId();
+    const snapshotChatId = (snapshot.chatId || "").trim();
+    if (currentChatId !== "unknown" && snapshotChatId) {
+      return snapshotChatId === currentChatId;
+    }
+
+    try {
+      const currentUrl = new URL(window.location.href);
+      const sourceUrl = new URL(snapshot.pageUrl || snapshot.sourceUrl || window.location.href);
+      return currentUrl.origin === sourceUrl.origin && currentUrl.pathname === sourceUrl.pathname;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function persistDataLayerSnapshot(snapshot) {
+    latestDataLayerSnapshot = snapshot;
+    let stored = false;
+
+    try {
+      const encoded = JSON.stringify(snapshot);
+      if (encoded.length <= CHATGPT_SESSION_LIMIT) {
+        sessionStorage.setItem(CHATGPT_SESSION_KEY, encoded);
+        stored = true;
+      } else {
+        sessionStorage.removeItem(CHATGPT_SESSION_KEY);
+        console.log("[Engram][ChatGPT] data-layer snapshot kept in memory only; too large for sessionStorage");
+      }
+    } catch (err) {
+      console.warn("[Engram][ChatGPT] could not persist data-layer snapshot", err);
+    }
+
+    return stored;
+  }
+
+  function readSnapshotFromSession(key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (err) {
+      console.warn("[Engram][ChatGPT] could not read data-layer snapshot", err);
+      return null;
+    }
+  }
+
+  function getMatchingDataLayerSnapshot() {
+    if (snapshotMatchesCurrentChat(latestDataLayerSnapshot)) {
+      return latestDataLayerSnapshot;
+    }
+
+    for (const key of [CHATGPT_SESSION_KEY, CHATGPT_PAGE_SESSION_KEY]) {
+      const snapshot = readSnapshotFromSession(key);
+      if (snapshotMatchesCurrentChat(snapshot)) {
+        latestDataLayerSnapshot = snapshot;
+        return snapshot;
+      }
+    }
+
+    return null;
+  }
+
+  function handleBridgeMessage(event) {
+    if (event.source !== window) return;
+    const data = event.data;
+    if (!data || data.source !== CHATGPT_BRIDGE_SOURCE) return;
+    if (data.type !== CHATGPT_BRIDGE_EVENT && data.type !== CHATGPT_LEGACY_EVENT) return;
+
+    const bridgeSnapshot = data.snapshot || data;
+    const messages = normalizeBridgeMessages(bridgeSnapshot.messages || data.messages);
+    if (!messages.length) return;
+
+    const snapshot = {
+      chatId: data.chatId || bridgeSnapshot.chatId || "unknown",
+      sourceTitle: bridgeSnapshot.title || data.title || null,
+      pageUrl: bridgeSnapshot.pageUrl || data.pageUrl || window.location.href,
+      sourceUrl: bridgeSnapshot.sourceUrl || data.sourceUrl || "",
+      capturedAt: bridgeSnapshot.capturedAt || data.capturedAt || Date.now(),
+      messages,
+    };
+
+    const stored = persistDataLayerSnapshot(snapshot);
+    // Set baseline so dirty observer knows initial hydration is done for this chat
+    if (snapshotMatchesCurrentChat(snapshot)) {
+      _snapshotBaselineAt = snapshot.capturedAt;
+    }
+    console.log(
+      "[Engram][ChatGPT] data-layer snapshot captured:",
+      `chat=${snapshot.chatId}`,
+      `messages=${messages.length}`,
+      `source=${snapshot.sourceUrl || "unknown"}`,
+      `sessionStored=${stored ? "yes" : "no"}`
+    );
+  }
+
+  if (!window.__ENGRAM_CHATGPT_CONTENT_BRIDGE__) {
+    window.__ENGRAM_CHATGPT_CONTENT_BRIDGE__ = true;
+    window.addEventListener("message", handleBridgeMessage);
+    console.log("[Engram][ChatGPT] listening for page-world bridge snapshots");
+  }
+
+  // ── Dirty-state tracking ──────────────────────────────────────────────────
+  // _chatDirty is set by:
+  //   1. MutationObserver: a [data-message-author-role] node was added since last accepted snapshot
+  //   2. Hash check in performScan: visible last-message differs from snapshot's last message
+  // Cleared when a fresh snapshot is accepted.
+
+  const SNAPSHOT_RECENT_MS  = 5 * 60 * 1000; // 5 min — beyond this, always re-fetch regardless of dirty
+  const HYDRATION_GRACE_MS  = 5_000;         // ignore DOM mutations within 5 s of snapshot acceptance
+
+  function isSnapshotRecent(snapshot) {
+    if (!snapshot?.capturedAt) return false;
+    return (Date.now() - snapshot.capturedAt) < SNAPSHOT_RECENT_MS;
+  }
+
+  // Fingerprint of the last non-empty message in an array (first+last 40 chars + length).
+  function _lastMsgFingerprint(messages) {
+    if (!Array.isArray(messages)) return "";
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const t = (messages[i]?.text || "").trim();
+      if (t.length > 0) return t.slice(0, 40) + "|" + t.slice(-40) + "|" + t.length;
+    }
+    return "";
+  }
+
+  // Fingerprint of the last visible [data-message-author-role] node in the DOM.
+  function _visibleLastMsgFingerprint() {
+    const nodes = document.querySelectorAll("[data-message-author-role]");
+    if (!nodes.length) return "";
+    const last = nodes[nodes.length - 1];
+    const role = last.getAttribute("data-message-author-role");
+    if (role !== "user" && role !== "assistant") return "";
+    const contentEl = getContentElement(role, last);
+    const rawText = contentEl
+      ? (contentEl.innerText || contentEl.textContent || "").trim()
+      : cleanMessageText((last.innerText || last.textContent || "").trim());
+    return rawText.slice(0, 40) + "|" + rawText.slice(-40) + "|" + rawText.length;
+  }
+
+  // Adaptive timeout based on how large the cached snapshot already is.
+  // When no cache exists, fall back to visible DOM node count as a size proxy.
+  function _adaptiveTimeout(cachedSnap, domNodeCount) {
+    const rawCount   = cachedSnap?.messages?.length || 0;
+    const totalChars = Array.isArray(cachedSnap?.messages)
+      ? cachedSnap.messages.reduce((s, m) => s + (m.text?.length || 0), 0)
+      : 0;
+    if (rawCount >= 300 || totalChars >= 300_000) return 20_000; // huge
+    if (rawCount >= 80  || totalChars >= 80_000)  return 10_000; // medium
+    if (!cachedSnap) {
+      const dn = domNodeCount || 0;
+      if (dn >= 200) return 20_000; // heavy DOM, no prior cache
+      if (dn >= 100) return 10_000;
+    }
+    return 4_000; // small
+  }
+
+  // MutationObserver: mark dirty when a new [data-message-author-role] node appears.
+  // Only fires after an accepted snapshot baseline exists AND the hydration grace
+  // window has elapsed — this prevents initial ChatGPT DOM hydration from
+  // immediately marking the chat dirty and forcing an unnecessary network fetch.
+  function _startDirtyObserver() {
+    const target = document.body || document.documentElement;
+    if (!target) {
+      document.addEventListener("DOMContentLoaded", () => _startDirtyObserver(), { once: true });
+      return;
+    }
+    let _hydrationLogDone = false;
+    const observer = new MutationObserver((mutations) => {
+      if (_chatDirty) return;
+      // No accepted snapshot yet, or within the hydration grace window: ignore
+      if (!_snapshotBaselineAt || Date.now() < _snapshotBaselineAt + HYDRATION_GRACE_MS) {
+        if (!_hydrationLogDone) {
+          _hydrationLogDone = true;
+          const reason = !_snapshotBaselineAt ? "no-snapshot-baseline" : "hydration-window";
+          console.log("[Engram][ChatGPT] dirty ignored during initial render reason=" + reason);
+        }
+        return;
+      }
+      _hydrationLogDone = false; // reset so next hydration period logs once
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          if (
+            (node.matches && node.matches("[data-message-author-role]")) ||
+            (node.querySelector && node.querySelector("[data-message-author-role]"))
+          ) {
+            _chatDirty = true;
+            console.log("[Engram][ChatGPT] chat marked dirty reason=dom-mutation");
+            return;
+          }
+        }
+      }
+    });
+    observer.observe(target, { childList: true, subtree: true });
+  }
+
   // ── Content element selection ─────────────────────────────────────────────
   //
   // Returns the tightest content container inside a [data-message-author-role]
@@ -104,6 +371,9 @@
   // while data-message-author-role has been stable across DOM revisions.
 
   function extractMessages() {
+    // Count contract: every visible user/assistant role node is one Engram
+    // message. Text extraction quality must not decide whether a visible role
+    // node exists as a message.
     const roleNodes = Array.from(
       document.querySelectorAll("[data-message-author-role]")
     );
@@ -128,9 +398,8 @@
       const role = node.getAttribute("data-message-author-role");
       if (role !== "user" && role !== "assistant") continue;
 
-      // Skip hidden / alternate message versions ChatGPT renders for a11y
-      if (node.getAttribute("aria-hidden") === "true") continue;
-      if (node.closest("[aria-hidden='true']")) continue;
+      // Skip hidden / alternate message versions ChatGPT renders for a11y.
+      if (!isVisibleRoleNode(node)) continue;
 
       const contentEl = getContentElement(role, node);
 
@@ -144,22 +413,15 @@
       }
 
       const cleanedText = cleanMessageText(rawText);
-      if (!isMeaningful(cleanedText)) continue;
-
-      // Extract code blocks from the content element if found, otherwise
-      // from the role node — do not scan the whole article to avoid picking
-      // up code from a neighbouring message.
-      const codeSource = contentEl || node;
-
+      const codeBlocks = extractCodeBlocks(node);
       messages.push({
         role,
         text:       cleanedText,
-        codeBlocks: extractCodeBlocks(codeSource),
+        codeBlocks,
         timestamp:  Date.now(),
         platform:   "chatgpt",
       });
     }
-
     const userCount = messages.filter((m) => m.role === "user").length;
     const aiCount   = messages.filter((m) => m.role === "assistant").length;
     const codeCount = messages.flatMap((m) => m.codeBlocks).length;
@@ -245,25 +507,347 @@
     return result;
   }
 
+  // ── Fresh snapshot helpers ────────────────────────────────────────────────
+  //
+  // _ensureFreshFetch posts a "fetch-conversation" to the page-world bridge and
+  // returns a promise that resolves when a fresh matching snapshot arrives.
+  // The promise has NO built-in timeout — callers race it against _timeoutPromise.
+  // Multiple callers for the same chatId reuse the same in-flight promise (dedupe).
+  // The background fetch continues even after the caller's soft budget expires.
+
+  function _timeoutPromise(ms) {
+    return new Promise((resolve) => setTimeout(() => resolve(null), ms));
+  }
+
+  // Interactive soft budget: how long to wait before returning cached/DOM result.
+  // The background fetch keeps running after this expires.
+  // When no cache exists, DOM node count proxies the chat size so heavy chats
+  // get enough time for the API fetch to complete instead of falling back to a
+  // partial virtualized-DOM extraction.
+  function _softBudget(cachedSnap, domNodeCount) {
+    const rawCount   = cachedSnap?.messages?.length || 0;
+    const totalChars = Array.isArray(cachedSnap?.messages)
+      ? cachedSnap.messages.reduce((s, m) => s + (m.text?.length || 0), 0) : 0;
+    if (rawCount >= 300 || totalChars >= 300_000) return 18_000; // huge: allow long wait
+    if (rawCount >= 80  || totalChars >= 80_000)  return 1_500;  // medium: 1.5 s
+    if (!cachedSnap) {
+      // No prior snapshot — use DOM node count as size proxy for first-scan heavy chats.
+      // 800 ms was too short for heavy chats where API fetch takes 1-5 s.
+      const dn = domNodeCount || 0;
+      if (dn >= 200) return 12_000; // huge DOM → long wait
+      if (dn >= 100) return  6_000; // large DOM → moderate wait
+    }
+    return 800; // small: 0.8 s
+  }
+
+  function _ensureFreshFetch(chatId) {
+    if (!chatId || chatId === "unknown") return Promise.resolve(null);
+
+    // Dedupe: reuse in-flight promise for the same chatId
+    if (_freshSnapInFlight && _freshSnapInFlight.chatId === chatId) {
+      console.log("[Engram][ChatGPT] reusing in-flight fresh snapshot chat=" + chatId);
+      return _freshSnapInFlight.promise;
+    }
+
+    // Cancel any stale in-flight for a different chatId
+    if (_freshSnapInFlight) {
+      _freshSnapInFlight.cancel();
+      _freshSnapInFlight = null;
+    }
+
+    const requestedAt = Date.now();
+    let cancelled = false;
+    let resolveSnap;
+    const promise = new Promise((resolve) => { resolveSnap = resolve; });
+
+    function onFreshMessage(event) {
+      if (cancelled) { window.removeEventListener("message", onFreshMessage); return; }
+      if (event.source !== window) return;
+      const data = event.data;
+      if (!data || data.source !== CHATGPT_BRIDGE_SOURCE) return;
+      if (data.type !== CHATGPT_BRIDGE_EVENT && data.type !== CHATGPT_LEGACY_EVENT) return;
+
+      // handleBridgeMessage (registered first) has already updated latestDataLayerSnapshot
+      const snap         = latestDataLayerSnapshot;
+      const snapChatId   = snap?.chatId || "unknown";
+      const snapRaw      = snap?.messages?.length ?? 0;
+      const snapCaptured = snap?.capturedAt || 0;
+
+      console.log(
+        "[Engram][ChatGPT] fresh snapshot candidate received",
+        `chat=${snapChatId}`, `raw=${snapRaw}`,
+        `capturedAt=${snapCaptured}`, `requestedAt=${requestedAt}`
+      );
+
+      if (!snap || !snapshotMatchesCurrentChat(snap)) {
+        console.log("[Engram][ChatGPT] fresh snapshot rejected reason=chat-mismatch");
+        return;
+      }
+      if (snapCaptured < requestedAt) {
+        console.log(
+          "[Engram][ChatGPT] fresh snapshot rejected reason=stale-capturedAt",
+          `capturedAt=${snapCaptured} < requestedAt=${requestedAt}`
+        );
+        return;
+      }
+
+      window.removeEventListener("message", onFreshMessage);
+      if (_freshSnapInFlight?.chatId === chatId) _freshSnapInFlight = null;
+      _chatDirty = false;
+      _snapshotBaselineAt = snap.capturedAt;
+      console.log("[Engram][ChatGPT] fresh snapshot accepted; dirty=false");
+      resolveSnap(snap);
+    }
+
+    window.addEventListener("message", onFreshMessage);
+    _freshSnapInFlight = { chatId, promise, cancel: () => { cancelled = true; } };
+    window.postMessage({ source: "engram-content-script", type: "fetch-conversation", chatId }, "*");
+    console.log("[Engram][ChatGPT] fresh snapshot refresh started in background");
+
+    return promise;
+  }
+
   // ── Scan ──────────────────────────────────────────────────────────────────
 
-  function performScan() {
+  async function performScan(mode) {
+    const isExport = (mode === "export");
     console.log("[Engram][ChatGPT] scan requested");
     const t0 = performance.now();
 
-    const messages     = extractMessages();
+    let extractionStrategy  = "visible-dom-fallback";
+    let partial             = true;
+    let messages;
+    let dataLayerSnapshot   = null; // hoisted so the return object can always reference it
+
+    // Tier 1: background network snapshot (filterResponseData — most complete)
+    let bgSnapshot = latestBGNetworkSnapshot;
+    if (!bgSnapshot || !snapshotMatchesCurrentChat(bgSnapshot)) {
+      try {
+        const r = await runtime.sendMessage({
+          type: "ENGRAM_GET_CHATGPT_SNAPSHOT",
+          chatId: getChatId(),
+        });
+        if (r?.snapshot && snapshotMatchesCurrentChat(r.snapshot)) {
+          bgSnapshot = r.snapshot;
+          latestBGNetworkSnapshot = bgSnapshot;
+        }
+      } catch (_) {}
+    }
+
+    _dbg("tier1 BG snapshot", { available: !!bgSnapshot, matches: bgSnapshot ? snapshotMatchesCurrentChat(bgSnapshot) : false,
+      chatId: bgSnapshot?.chatId, msgs: bgSnapshot?.messages?.length });
+
+    if (bgSnapshot && snapshotMatchesCurrentChat(bgSnapshot)) {
+      messages = bgSnapshot.messages;
+      extractionStrategy = "chatgpt-background-network";
+      partial = false;
+      console.log(
+        "[Engram][ChatGPT] using background network snapshot:",
+        `messages=${messages.length}`,
+        `chatId=${bgSnapshot.chatId}`
+      );
+    } else {
+      // ── Tier 2 / 3: data-layer snapshot or DOM fallback ──────────────────
+      const freshChatId   = getChatId();
+      const cachedSnap    = getMatchingDataLayerSnapshot();
+      // Compute DOM node count here so _softBudget/_adaptiveTimeout can use it
+      // to size the wait budget for heavy first-scan chats (no cache available).
+      const domNodeCount  = document.querySelectorAll("[data-message-author-role]").length;
+
+      // Hash-based dirty check
+      if (!_chatDirty && cachedSnap) {
+        const snapFp = _lastMsgFingerprint(cachedSnap.messages);
+        const domFp  = _visibleLastMsgFingerprint();
+        if (snapFp && domFp && snapFp !== domFp) {
+          _chatDirty = true;
+          console.log("[Engram][ChatGPT] chat marked dirty reason=last-msg-hash-mismatch");
+        }
+      }
+
+      const snapshotIsRecent = isSnapshotRecent(cachedSnap);
+      const needFresh        = _chatDirty || !snapshotIsRecent;
+      const baseTimeoutMs    = _adaptiveTimeout(cachedSnap, domNodeCount);
+      const softBudgetMs     = _softBudget(cachedSnap, domNodeCount);
+      const waitBudgetMs     = isExport ? baseTimeoutMs : softBudgetMs;
+      const tierLabel        = baseTimeoutMs >= 15_000 ? "huge" : baseTimeoutMs >= 8_000 ? "medium" : "small";
+
+      console.log(
+        "[Engram][ChatGPT] scan",
+        `mode=${isExport ? "export" : "interactive"}`,
+        `dirty=${_chatDirty}`,
+        `recent=${snapshotIsRecent}`,
+        `tier=${tierLabel}`,
+        `domNodes=${domNodeCount}`,
+        `softBudget=${softBudgetMs}ms`,
+        `hardTimeout=${baseTimeoutMs}ms`
+      );
+      _dbg("scan start", { chatId: freshChatId, url: location.href, mode: isExport ? "export" : "interactive",
+        domNodes: domNodeCount, cachedSnap: !!cachedSnap, dirty: _chatDirty, recent: snapshotIsRecent });
+
+      if (!needFresh) {
+        // Clean + recent: use immediately, no network fetch
+        if (cachedSnap) {
+          dataLayerSnapshot = cachedSnap;
+          messages = cachedSnap.messages;
+          extractionStrategy = "chatgpt-data-layer";
+          partial = false;
+          console.log("[Engram][ChatGPT] fast scan using cached snapshot");
+          _dbg("source=data-layer-cache", { msgs: messages.length });
+        } else {
+          messages = extractMessages();
+          console.log("[Engram][ChatGPT] fast scan using visible DOM bootstrap");
+          _dbg("source=dom-fast", { msgs: messages.length });
+        }
+      } else {
+        if (!isExport && !cachedSnap && domNodeCount < 100) {
+          // Interactive, no prior cache, small visible DOM.
+          // Extract DOM first for fast response on small/short chats.
+          messages = extractMessages();
+          console.log("[Engram][ChatGPT] fast scan using visible DOM bootstrap");
+          _dbg("source=dom-fast-attempt", { msgs: messages.length, domNodes: domNodeCount });
+
+          if (messages.length === 0 && freshChatId !== "unknown") {
+            // DOM returned nothing but chatId is valid — heavy chat whose DOM hasn't
+            // rendered yet (SPA hydration lag) or whose initial fetch was served by a
+            // service worker before the page-bridge loaded.
+            // Trigger an explicit API fetch and wait for the real snapshot instead of
+            // returning a zero-count partial that would show incorrect health in the popup.
+            const zeroDomBudget = 10_000;
+            console.log(
+              "[Engram][ChatGPT] DOM=0 with valid chatId — awaiting fresh snapshot",
+              `chat=${freshChatId}`, `budget=${zeroDomBudget}ms`
+            );
+            _dbg("zero-dom-rescue start", { chatId: freshChatId, budget: zeroDomBudget });
+            const freshSnap = await Promise.race([
+              _ensureFreshFetch(freshChatId),
+              _timeoutPromise(zeroDomBudget),
+            ]);
+            if (freshSnap) {
+              dataLayerSnapshot = freshSnap;
+              messages = freshSnap.messages;
+              extractionStrategy = "chatgpt-data-layer";
+              partial = false;
+              console.log("[Engram][ChatGPT] zero-DOM rescue: fresh snapshot msgs=" + messages.length);
+              _dbg("zero-dom-rescue resolved", { msgs: messages.length });
+            } else {
+              // Last chance: session storage may have been updated while we waited
+              dataLayerSnapshot = getMatchingDataLayerSnapshot();
+              if (dataLayerSnapshot) {
+                messages = dataLayerSnapshot.messages;
+                extractionStrategy = "chatgpt-data-layer";
+                partial = false;
+                console.log("[Engram][ChatGPT] zero-DOM rescue: session snapshot found msgs=" + messages.length);
+                _dbg("zero-dom-rescue session", { msgs: messages.length });
+              } else {
+                console.log("[Engram][ChatGPT] zero-DOM rescue timed out — likely genuine new/empty chat");
+                _dbg("zero-dom-rescue timeout", { budget: zeroDomBudget });
+              }
+            }
+          } else if (freshChatId !== "unknown") {
+            _ensureFreshFetch(freshChatId); // pre-warm for next scan
+          }
+        } else {
+          // Race fresh fetch against budget.
+          // Interactive: soft budget (returns cached/DOM if expires; fetch continues).
+          // Export: hard timeout (waits longer for correctness).
+          console.log(`[Engram][ChatGPT] requesting fresh conversation snapshot for scan chat=${freshChatId}`);
+          _dbg("fresh-fetch start", { chatId: freshChatId, budget: waitBudgetMs, domNodes: domNodeCount });
+          let freshSnap = null;
+          if (freshChatId !== "unknown") {
+            freshSnap = await Promise.race([
+              _ensureFreshFetch(freshChatId),
+              _timeoutPromise(waitBudgetMs),
+            ]);
+          }
+
+          if (freshSnap) {
+            console.log(
+              "[Engram][ChatGPT] fresh conversation snapshot received:",
+              `raw=${freshSnap.messages?.length}`, `capturedAt=${freshSnap.capturedAt}`
+            );
+            _dbg("fresh-fetch resolved", { msgs: freshSnap.messages?.length });
+          } else if (isExport) {
+            console.log("[Engram][ChatGPT] fresh snapshot timeout; using cached snapshot");
+            _dbg("fresh-fetch hard-timeout", { budget: waitBudgetMs });
+          } else {
+            console.log("[Engram][ChatGPT] fresh snapshot soft timeout; using cached/dom result");
+            _dbg("fresh-fetch soft-timeout", { budget: waitBudgetMs, domNodes: domNodeCount });
+          }
+
+          // Tier 2: page-bridge snapshot (fresh if fetch resolved, cached otherwise)
+          dataLayerSnapshot = getMatchingDataLayerSnapshot();
+          if (dataLayerSnapshot) {
+            messages = dataLayerSnapshot.messages;
+            extractionStrategy = "chatgpt-data-layer";
+            partial = false;
+            console.log(
+              "[Engram][ChatGPT] using data-layer snapshot:",
+              `messages=${messages.length}`, `capturedAt=${dataLayerSnapshot.capturedAt || "unknown"}`
+            );
+            _dbg("source=data-layer", { msgs: messages.length });
+          } else {
+            // Tier 3: visible DOM fallback (incomplete for virtualized heavy chats)
+            messages = extractMessages();
+            console.log("[Engram][ChatGPT] no snapshot available; using visible DOM fallback (partial)");
+            _dbg("source=dom-fallback", { msgs: messages.length, domNodes: domNodeCount });
+          }
+        }
+      }
+    }
+
     const scanDuration = Math.round(performance.now() - t0);
 
-    const userMessages  = messages.filter((m) => m.role === "user");
-    const aiMessages    = messages.filter((m) => m.role === "assistant");
-    const codeBlocks    = messages.flatMap((m) => m.codeBlocks || []);
-    const totalChars    = messages.reduce((sum, m) => sum + (m.text?.length || 0), 0);
+    // Pass 1: filter structural/null nodes (empty text AND no code blocks).
+    const rawNodeCount   = messages.length;
+    const rawMessages    = messages; // preserve all active-chain nodes
+    const afterEmpty     = messages.filter((m) => {
+      const hasText = (m.text || "").trim().length > 0;
+      const hasCode = Array.isArray(m.codeBlocks) && m.codeBlocks.length > 0;
+      return hasText || hasCode;
+    });
+    const filteredOutEmpty = rawNodeCount - afterEmpty.length;
+
+    // Pass 2: filter assistant tool-call JSON blobs.
+    // These are assistant turns whose text is a JSON object whose top-level
+    // keys are internal ChatGPT tool dispatch keys (not user-visible content).
+    const TOOL_KEYS = new Set([
+      "search_query", "open", "click", "find", "screenshot", "image_query",
+      "product_query", "finance", "weather", "sports", "calculator", "time",
+      "response_length", "ref_id",
+    ]);
+    const displayMessages = afterEmpty.filter((m) => {
+      if (m.role !== "assistant") return true;
+      const trimmed = (m.text || "").trim();
+      if (!trimmed.startsWith("{")) return true;
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return !Object.keys(parsed).some((k) => TOOL_KEYS.has(k));
+        }
+      } catch (_) {}
+      return true;
+    });
+    const filteredOutToolJson = afterEmpty.length - displayMessages.length;
+
+    if (filteredOutEmpty > 0 || filteredOutToolJson > 0) {
+      console.log(`[Engram][ChatGPT] data-layer raw nodes: ${rawNodeCount}`);
+      console.log(`[Engram][ChatGPT] filtered display messages: ${displayMessages.length}`);
+      if (filteredOutEmpty    > 0) console.log(`[Engram][ChatGPT] filtered out empty: ${filteredOutEmpty}`);
+      if (filteredOutToolJson > 0) console.log(`[Engram][ChatGPT] filtered out tool json: ${filteredOutToolJson}`);
+    }
+
+    const userMessages  = displayMessages.filter((m) => m.role === "user");
+    const aiMessages    = displayMessages.filter((m) => m.role === "assistant");
+    const codeBlocks    = displayMessages.flatMap((m) => m.codeBlocks || []);
+    const totalChars    = displayMessages.reduce((sum, m) => sum + (m.text?.length || 0), 0);
     const renderedNodes = document.querySelectorAll("[data-message-author-role]").length;
-    const contentMeta   = computeContentMetadata(messages);
+    const contentMeta   = computeContentMetadata(displayMessages);
+    const currentChatId = getChatId();
 
     console.log(
       `[Engram][ChatGPT] scan complete: user=${userMessages.length} ai=${aiMessages.length}` +
-      ` total=${messages.length} code=${codeBlocks.length} chars=${totalChars} ms=${scanDuration}` +
+      ` total=${displayMessages.length} code=${codeBlocks.length} chars=${totalChars} ms=${scanDuration}` +
+      (rawNodeCount > displayMessages.length ? ` raw=${rawNodeCount}` : "") +
       (contentMeta.embeddedTranscriptDetected ? " [transcript-detected]" : "") +
       (contentMeta.largeMessageCount ? ` large-msgs=${contentMeta.largeMessageCount}` : "")
     );
@@ -272,11 +856,17 @@
       type:         "ENGRAM_SCAN_COMPLETE",
       userCount:    userMessages.length,
       aiCount:      aiMessages.length,
-      total:        messages.length,
+      total:        displayMessages.length,
       codeCount:    codeBlocks.length,
-      messages,
-      chatId:       getChatId(),
-      sourceTitle:  getChatTitle(),
+      messages:     displayMessages,
+      displayMessages,
+      displayMessageCount: displayMessages.length,
+      rawMessages,
+      rawNodeCount,
+      filteredOutEmpty,
+      filteredOutToolJson,
+      chatId:       currentChatId !== "unknown" ? currentChatId : dataLayerSnapshot?.chatId || "unknown",
+      sourceTitle:  dataLayerSnapshot?.sourceTitle || getChatTitle(),
       scanDuration,
       totalChars,
       domSize:      document.querySelectorAll("*").length,
@@ -284,6 +874,11 @@
       url:          window.location.href,
       scannedAt:    Date.now(),
       platform:     "chatgpt",
+      extractionStrategy,
+      partial,
+      dataLayerSnapshotAvailable: Boolean(dataLayerSnapshot),
+      dataLayerCapturedAt: dataLayerSnapshot?.capturedAt || null,
+      dataLayerSourceUrl:  dataLayerSnapshot?.sourceUrl || null,
       ...contentMeta,
     };
   }
@@ -291,24 +886,63 @@
   // ── Message handler ───────────────────────────────────────────────────────
 
   runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type !== "ENGRAM_START_SCAN") return;
-
-    let result;
-    try {
-      result = performScan();
-      console.log("[Engram][ChatGPT] sent messages to background:", result.total);
-    } catch (err) {
-      result = {
-        type: "ENGRAM_SCAN_COMPLETE",
-        userCount: 0, aiCount: 0, total: 0, codeCount: 0,
-        messages: [], chatId: "unknown", sourceTitle: null,
-        scanDuration: 0, totalChars: 0, domSize: 0, renderedNodes: 0,
-        url: window.location.href, scannedAt: Date.now(), platform: "chatgpt",
-        error: err.message || String(err),
-      };
+    // Background push: network-captured conversation snapshot
+    if (msg.type === "ENGRAM_CHATGPT_BG_SNAPSHOT") {
+      if (msg.snapshot) {
+        latestBGNetworkSnapshot = msg.snapshot;
+        console.log(
+          "[Engram][ChatGPT] background network snapshot received:",
+          `chatId=${msg.snapshot.chatId}`,
+          `messages=${msg.snapshot.messages?.length}`
+        );
+      }
+      if (isFirefox) return Promise.resolve({ ok: true });
+      sendResponse({ ok: true });
+      return true;
     }
 
-    const response = Promise.resolve(result);
+    if (msg.type !== "ENGRAM_START_SCAN") return;
+
+    const scanMode = msg.mode || "interactive";
+    _dbg("ENGRAM_START_SCAN received", { mode: scanMode, url: location.href, chatId: getChatId() });
+    const response = Promise.resolve()
+      .then(() => {
+        _wIsScanning = true;
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
+        return performScan(scanMode);
+      })
+      .then((result) => {
+        _wIsScanning = false;
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
+        console.log(
+          "[Engram][ChatGPT] sending messages to background:",
+          `total=${result.total}`,
+          `strategy=${result.extractionStrategy}`,
+          `partial=${result.partial}`
+        );
+        return result;
+      })
+      .then((result) => {
+        console.log("[Engram][ChatGPT] background send success");
+        return result;
+      })
+      .catch((err) => {
+        _wIsScanning = false;
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
+        console.error("[Engram][ChatGPT] background send failed:", err.message || String(err));
+        return {
+          type: "ENGRAM_SCAN_COMPLETE",
+          userCount: 0, aiCount: 0, total: 0, codeCount: 0,
+          messages: [], chatId: "unknown", sourceTitle: null,
+          scanDuration: 0, totalChars: 0, domSize: 0, renderedNodes: 0,
+          url: window.location.href, scannedAt: Date.now(), platform: "chatgpt",
+          extractionStrategy: "chatgpt-scan-error",
+          error: err.message || String(err),
+        };
+      });
 
     if (isFirefox) {
       return response;
@@ -348,6 +982,7 @@
   let _wDragStartY  = 0;
   let _wDragElX     = 0;
   let _wDragElY     = 0;
+  let _wIsScanning  = false;
   let _wClickTarget = null;
   let _wRafId       = null;
   const _wMargin    = 8;
@@ -448,28 +1083,14 @@
   }
 
   function _wLiveStats() {
-    const msgs = extractMessages();    // ChatGPT: extractMessages() not captureDomMessages()
-    const total = msgs.length;
-    if (!total) return { mode: "empty", hasData: false };
-
-    const user   = msgs.filter(m => m.role === "user").length;
-    const ai     = msgs.filter(m => m.role === "assistant").length;
-    const code   = msgs.flatMap(m => m.codeBlocks || []).length;
-    const status = _wLiveStatus(total, code);
-
-    return {
-      mode:     "live",
-      hasData:  true,
-      total, user, ai, code,
-      label:    status.label,
-      color:    status.color,
-      source:   "Visible chat activity",
-      accuracy: "Estimated",
-      hint:     "Full scan creates handoff-ready report.",
-    };
+    // ChatGPT virtualizes the DOM: visible node count is far lower than the real
+    // message count for heavy chats. Never derive health from DOM nodes alone —
+    // show a neutral "scan needed" prompt instead of a misleading health label.
+    return { mode: "scan-needed", hasData: true };
   }
 
   function _wStats() {
+    if (_wIsScanning) return { mode: "scanning", hasData: true };
     const exactSnapshot = _wFindExactSnapshot();
     if (!exactSnapshot) return _wLiveStats();
 
@@ -513,6 +1134,52 @@
         "</div>" +
         "<div class='ew-body'>" +
           "<div class='ew-hint ew-hint-expanded'>No readable chat data yet.</div>" +
+        "</div>";
+      _wEl.querySelector(".ew-close").onclick = _wToggle;
+      return;
+    }
+
+    if (st.mode === "scanning" && _wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>Scanning&#x2026;</span>" +
+        "</div>";
+      return;
+    }
+
+    if (st.mode === "scanning") {
+      _wEl.innerHTML =
+        "<div class='ew-head'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+        "</div>" +
+        "<div class='ew-body'>" +
+          "<div class='ew-hint ew-hint-expanded'>Scan in progress&#x2026;</div>" +
+        "</div>";
+      _wEl.querySelector(".ew-close").onclick = _wToggle;
+      return;
+    }
+
+    if (st.mode === "scan-needed" && _wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact' title='Click Scan Chat in the Engram popup for accurate results'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>Scan needed</span>" +
+        "</div>";
+      return;
+    }
+
+    if (st.mode === "scan-needed") {
+      _wEl.innerHTML =
+        "<div class='ew-head'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+        "</div>" +
+        "<div class='ew-body'>" +
+          "<div class='ew-hint ew-hint-expanded'>Click <b>Scan Chat</b> in the Engram popup for accurate health and message count.</div>" +
         "</div>";
       _wEl.querySelector(".ew-close").onclick = _wToggle;
       return;
@@ -793,10 +1460,43 @@
     } catch (_) {}
   }
 
-  // Widget refresh on its own 3s tick
-  setInterval(() => { if (_wEnabled && _wEl) _wUpdate(); }, 3000);
+  // SPA navigation detection: ChatGPT switches chats via pushState without a full reload.
+  // Poll every 500 ms; reset stale snapshot state when the URL changes.
+  let _lastHref = location.href;
+  setInterval(() => {
+    const currentHref = location.href;
+    if (currentHref === _lastHref) return;
+    _lastHref = currentHref;
+    latestBGNetworkSnapshot = null;  // stale — new chat needs fresh capture
+    _chatDirty              = false; // new chat starts clean; MO re-arms automatically
+    _snapshotBaselineAt     = null;  // reset so dirty observer ignores initial hydration
+    if (_freshSnapInFlight) { _freshSnapInFlight.cancel(); _freshSnapInFlight = null; }
+    _wIsScanning = false;
+    _wLastKey = "";
+    console.log(
+      "[Engram][ChatGPT] SPA navigation detected",
+      "chatId=" + getChatId(),
+      "href=" + currentHref
+    );
+  }, 500);
+
+  // Widget health tick: re-inject if React's reconciler removed the widget node.
+  setInterval(() => {
+    if (!_wEnabled) return;
+    if (_wEl && !document.contains(_wEl)) {
+      // Widget was removed from DOM (SPA re-render); clear reference so _wInject recreates it.
+      _wEl = null;
+    }
+    if (!_wEl) {
+      _wInject();
+    } else {
+      _wUpdate();
+    }
+  }, 3000);
 
   if (document.body) { _wBootstrap(); }
   else { document.addEventListener("DOMContentLoaded", _wBootstrap); }
+
+  _startDirtyObserver();
 
 })();

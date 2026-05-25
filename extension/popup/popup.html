@@ -25,10 +25,8 @@
 
     <!-- Platform Bar -->
     <div class="platform-bar">
-      <svg class="platform-icon" id="platformIcon" viewBox="0 0 24 24" width="13" height="13">
-        <path d="M12 2 L15 8 L22 9 L17 14 L18 21 L12 18 L6 21 L7 14 L2 9 L9 8 Z" fill="currentColor"/>
-      </svg>
-      <span id="platformName">—</span>
+      <img class="platform-logo" id="platformLogo" alt="" aria-hidden="true" />
+      <span id="platformName"></span>
       <span class="platform-chat-title" id="chatTitle"></span>
     </div>
 
@@ -179,12 +177,18 @@
       <div class="settings-section">
         <div class="settings-section-label">Platforms</div>
         <div class="settings-row">
-          <span class="settings-item-name">Claude.ai</span>
-          <span class="badge badge-active">Active</span>
+          <span class="settings-platform-name">
+            <img class="settings-platform-logo" src="../assets/platforms/chatgpt-logo.svg" alt="" aria-hidden="true" />
+            <span>ChatGPT</span>
+          </span>
+          <span class="badge badge-available" id="badgeChatGPT">Available</span>
         </div>
         <div class="settings-row">
-          <span class="settings-item-name">Gemini</span>
-          <span class="badge badge-soon">Coming soon</span>
+          <span class="settings-platform-name">
+            <img class="settings-platform-logo" src="../assets/platforms/claude-logo.svg" alt="" aria-hidden="true" />
+            <span>Claude.ai</span>
+          </span>
+          <span class="badge badge-available" id="badgeClaude">Available</span>
         </div>
       </div>
 
@@ -200,8 +204,7 @@
         <div class="settings-section-label">AI Handoff Generation</div>
 
         <div class="settings-note">
-          Demo Mode uses the Engram demo backend — no API key required.
-          For production use, switch to Custom Mode.
+          Demo Mode uses the Engram demo backend. No API key required.
         </div>
 
         <div class="settings-row">
@@ -216,8 +219,7 @@
         <div id="panelDemo" class="settings-panel">
           <div class="settings-note">
             Demo Mode uses the Engram demo backend.<br>
-            No API key required.<br>
-            Gemini API key is stored securely in Vercel, not in the extension.
+            No API key required.
           </div>
           <div id="demoStatus" class="settings-warning">Demo backend URL not connected yet.</div>
         </div>
@@ -227,7 +229,6 @@
           <div class="settings-input-group">
             <label class="settings-input-label" for="selectProvider">Provider</label>
             <select id="selectProvider" class="settings-input settings-select">
-              <option value="gemini">Gemini</option>
               <option value="openai">OpenAI</option>
             </select>
           </div>
