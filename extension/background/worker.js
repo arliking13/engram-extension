@@ -8,6 +8,104 @@ const storage   = new Storage();
 const runtime   = typeof browser !== "undefined" ? browser.runtime   : chrome.runtime;
 const storeApi  = typeof browser !== "undefined" ? browser.storage.local : chrome.storage.local;
 const isFirefox = typeof browser !== "undefined";
+const tabsApi   = typeof browser !== "undefined" ? browser.tabs : chrome.tabs;
+const ACTIVE_SCAN_SESSIONS_KEY = "engram:runtime:activeScanSessions";
+const runtimeStoreApi = (
+  (typeof browser !== "undefined" && browser.storage && browser.storage.session) ? browser.storage.session :
+  (typeof chrome !== "undefined" && chrome.storage && chrome.storage.session) ? chrome.storage.session :
+  storeApi
+);
+const usesRuntimeSessionStorage = runtimeStoreApi !== storeApi;
+
+function runtimeStoreGet(key) {
+  if (isFirefox) return runtimeStoreApi.get(key);
+  return new Promise((resolve) => runtimeStoreApi.get(key, resolve));
+}
+
+function runtimeStoreSet(obj) {
+  if (isFirefox) return runtimeStoreApi.set(obj);
+  return new Promise((resolve) => runtimeStoreApi.set(obj, resolve));
+}
+
+function runtimeStoreRemove(key) {
+  if (isFirefox) return runtimeStoreApi.remove(key);
+  return new Promise((resolve) => runtimeStoreApi.remove(key, resolve));
+}
+
+async function clearActiveScanSession(tabId, reason) {
+  if (tabId === undefined || tabId === null) return;
+  try {
+    const stored = await runtimeStoreGet(ACTIVE_SCAN_SESSIONS_KEY);
+    const sessions = (stored && stored[ACTIVE_SCAN_SESSIONS_KEY]) || {};
+    if (!sessions[String(tabId)]) return;
+    delete sessions[String(tabId)];
+    await runtimeStoreSet({ [ACTIVE_SCAN_SESSIONS_KEY]: sessions });
+    console.log("[Engram][BG] active session cleared", { tabId, reason });
+  } catch (e) {
+    console.warn("[Engram][BG] active scan session clear failed", e);
+  }
+}
+
+async function getActiveScanSessions() {
+  try {
+    const stored = await runtimeStoreGet(ACTIVE_SCAN_SESSIONS_KEY);
+    return (stored && stored[ACTIVE_SCAN_SESSIONS_KEY]) || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+async function setActiveScanSessions(sessions) {
+  await runtimeStoreSet({ [ACTIVE_SCAN_SESSIONS_KEY]: sessions || {} });
+}
+
+function scanResultTotal(result) {
+  return Number(result?.total ?? result?.stats?.total ?? result?.messages?.length ?? 0) || 0;
+}
+
+function activeSessionMatches(session, tabId, platform, snapshotKey) {
+  return !!session &&
+    Number(session.tabId) === Number(tabId) &&
+    session.platform === platform &&
+    session.snapshotKey === snapshotKey &&
+    !!session.scanResult;
+}
+
+function broadcastActiveScanSessionUpdated(tabId, activeSession) {
+  if (!activeSession) return;
+  const message = {
+    type: "ENGRAM_ACTIVE_SCAN_SESSION_UPDATED",
+    tabId,
+    platform: activeSession.platform,
+    snapshotKey: activeSession.snapshotKey,
+    activeSession,
+    scanResult: activeSession.scanResult,
+  };
+
+  try {
+    const p = runtime.sendMessage(message);
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch (_) {}
+
+  try {
+    const p = tabsApi.sendMessage(tabId, message);
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch (_) {}
+}
+
+if (!usesRuntimeSessionStorage) {
+  runtimeStoreRemove(ACTIVE_SCAN_SESSIONS_KEY).catch(() => {});
+}
+
+try {
+  tabsApi.onUpdated.addListener((tabId, changeInfo) => {
+    if (!changeInfo.url) return;
+    clearActiveScanSession(tabId, "tab-url-changed");
+  });
+  tabsApi.onRemoved.addListener((tabId) => {
+    clearActiveScanSession(tabId, "tab-removed");
+  });
+} catch (_) {}
 
 // ── Message Router ──────────────────────────────────────────────────────────
 
@@ -35,6 +133,18 @@ function routeMessage(msg, sender) {
 
     case "ENGRAM_SCAN_COMPLETE":
       return handleScanComplete(msg, sender);
+
+    case "ENGRAM_LIVE_SCAN_COMPLETE":
+      return handleLiveScanComplete(msg, sender);
+
+    case "ENGRAM_GET_ACTIVE_SCAN_SESSION":
+      return handleGetActiveScanSession(msg, sender);
+
+    case "ENGRAM_SET_ACTIVE_SCAN_SESSION":
+      return handleSetActiveScanSession(msg, sender);
+
+    case "ENGRAM_CLEAR_ACTIVE_SCAN_SESSION":
+      return handleClearActiveScanSession(msg, sender);
 
     case "ENGRAM_GET_STATE":
       return handleGetState();
@@ -96,6 +206,264 @@ async function handleScanComplete(msg, sender) {
   }
   console.log("[Engram][BG] stored active tab state tabId=" + (sender.tab?.id ?? "none"));
   return { ok: true };
+}
+
+async function handleGetActiveScanSession(msg, sender) {
+  const tabId = msg.tabId ?? sender.tab?.id;
+  const platform = msg.platform;
+  const snapshotKey = msg.snapshotKey;
+  const sessions = await getActiveScanSessions();
+  const session = sessions[String(tabId)] || null;
+  const hasActiveSession = activeSessionMatches(session, tabId, platform, snapshotKey);
+  return {
+    ok: true,
+    hasActiveSession,
+    activeSession: hasActiveSession ? session : null,
+    scanResult: hasActiveSession ? session.scanResult : null,
+  };
+}
+
+async function handleSetActiveScanSession(msg, sender) {
+  const tabId = msg.tabId ?? sender.tab?.id;
+  const session = msg.session || {};
+  const scanResult = session.scanResult || msg.scanResult;
+  const platform = session.platform || msg.platform || scanResult?.platform;
+  const snapshotKey = session.snapshotKey || msg.snapshotKey || scanResult?.snapshotKey;
+  if (tabId === undefined || tabId === null || !platform || !snapshotKey || !scanResult) {
+    return { ok: false, error: "missing active scan session fields" };
+  }
+
+  const now = Date.now();
+  const nextSession = {
+    tabId,
+    platform,
+    chatId: session.chatId || msg.chatId || scanResult.chatId || null,
+    snapshotKey,
+    sourceUrl: session.sourceUrl || msg.sourceUrl || scanResult.url || scanResult.sourceUrl || "",
+    startedAt: session.startedAt || now,
+    lastUpdatedAt: now,
+    scanResult: {
+      ...scanResult,
+      platform,
+      snapshotKey,
+    },
+  };
+
+  const sessions = await getActiveScanSessions();
+  sessions[String(tabId)] = nextSession;
+  await setActiveScanSessions(sessions);
+  console.log("[Engram][BG] active session set", {
+    tabId,
+    platform,
+    snapshotKey,
+    total: scanResultTotal(nextSession.scanResult),
+  });
+  broadcastActiveScanSessionUpdated(tabId, nextSession);
+
+  return {
+    ok: true,
+    hasActiveSession: true,
+    activeSession: nextSession,
+    scanResult: nextSession.scanResult,
+  };
+}
+
+async function handleClearActiveScanSession(msg, sender) {
+  const tabId = msg.tabId ?? sender.tab?.id;
+  await clearActiveScanSession(tabId, msg.reason || "explicit");
+  return { ok: true, hasActiveSession: false };
+}
+
+async function handleLiveScanComplete(msg, sender) {
+  const msgs = msg.messages || [];
+  if (!msgs.length) return { ok: true };
+  const platform = msg.platform;
+  if (platform !== "chatgpt" && platform !== "claude") return { ok: true };
+  const tabId = sender.tab?.id ?? msg.tabId;
+  const chatId = msg.chatId || "unknown";
+  const snapshotKey = msg.snapshotKey || ((chatId && chatId !== "unknown")
+    ? "chat:" + chatId
+    : "url:" + String(msg.sourceUrl || "").split("?")[0]);
+
+  console.log("[Engram][BG] live update received", {
+    tabId,
+    platform: msg.platform,
+    snapshotKey: msg.snapshotKey,
+    total: msg.total,
+    messages: Array.isArray(msg.messages) ? msg.messages.length : 0,
+  });
+
+  const activeSessions = await getActiveScanSessions();
+  const activeSession = activeSessions[String(tabId)] || null;
+  console.log("[Engram][BG] active session lookup for live update", {
+    tabId,
+    platform,
+    incomingSnapshotKey: msg.snapshotKey,
+    activeSnapshotKey: activeSession?.snapshotKey || null,
+    hasActiveSession: !!activeSession,
+  });
+  if (!activeSessionMatches(activeSession, tabId, platform, snapshotKey)) {
+    console.log("[Engram][BG] live update ignored: no matching active session", {
+      tabId,
+      platform,
+      incomingSnapshotKey: msg.snapshotKey,
+      activeSnapshotKey: activeSession?.snapshotKey || null,
+    });
+    return { ok: true, hasActiveSession: false, baselineEstablished: false };
+  }
+
+  // Per-conversation storage keyed by snapshotKey (allows multi-tab isolation)
+  const byKeyStorageKey = platform === "chatgpt"
+    ? "engram:chatgpt:snapshotsByKey"
+    : "engram:claude:snapshotsByKey";
+  let snapshotsByKey = {};
+  try {
+    const existing = await storeApi.get(byKeyStorageKey);
+    snapshotsByKey = (existing && existing[byKeyStorageKey]) || {};
+  } catch (_) {}
+
+  const _liveBestMessages = (snapshot) => {
+    if (Array.isArray(snapshot?.messages) && snapshot.messages.length) return snapshot.messages;
+    if (Array.isArray(snapshot?.displayMessages) && snapshot.displayMessages.length) return snapshot.displayMessages;
+    if (Array.isArray(snapshot?.rawMessages) && snapshot.rawMessages.length) return snapshot.rawMessages;
+    return [];
+  };
+
+  const _existingMessages = _liveBestMessages(activeSession.scanResult);
+  const _existingTotal = Number(
+    activeSession.scanResult?.stats?.total ??
+    activeSession.scanResult?.total ??
+    activeSession.scanResult?.messageCount ??
+    activeSession.scanResult?.displayMessageCount ??
+    _existingMessages.length ??
+    0
+  ) || 0;
+
+  const _incomingTotal = Number(
+    msg.total ??
+    msg.displayMessageCount ??
+    msgs.length ??
+    0
+  ) || 0;
+  const oldTotal = _existingTotal;
+  const mergeMessages = (existingMessages, incomingMessages) => {
+    const merged = Array.isArray(existingMessages) ? existingMessages.slice() : [];
+    const seen = new Set(merged.map((m) => [
+      String(m?.role || ""),
+      String(m?.text || "").trim(),
+    ].join("|")));
+    (Array.isArray(incomingMessages) ? incomingMessages : []).forEach((m) => {
+      const key = [
+        String(m?.role || ""),
+        String(m?.text || "").trim(),
+      ].join("|");
+      if (!String(m?.text || "").trim() || seen.has(key)) return;
+      seen.add(key);
+      merged.push(m);
+    });
+    return merged;
+  };
+
+  let effectiveMessages = msgs;
+  if (_existingTotal > 0 && _incomingTotal > 0 && _incomingTotal < _existingTotal) {
+    const mergedMessages = mergeMessages(_existingMessages, msgs);
+    if (mergedMessages.length <= _existingTotal) {
+      console.log(
+        "[Engram][BG] live scan ignored: partial snapshot would shrink baseline",
+        `platform=${platform}`,
+        `reason=${msg.liveReason}`,
+        `snapshotKey=${snapshotKey}`,
+        `incoming=${_incomingTotal}`,
+        `existing=${_existingTotal}`
+      );
+
+      return {
+        ok: true,
+        baselineEstablished: true,
+        hasActiveSession: true,
+        ignored: true,
+        reason: "partial_live_snapshot_no_new_messages",
+        incomingTotal: _incomingTotal,
+        existingTotal: _existingTotal,
+        activeSession,
+        scanResult: activeSession.scanResult,
+      };
+    }
+
+    effectiveMessages = mergedMessages;
+    console.log("[Engram][BG] live partial snapshot merged into active session", {
+      tabId,
+      platform,
+      snapshotKey,
+      incomingTotal: _incomingTotal,
+      oldTotal: _existingTotal,
+      newTotal: effectiveMessages.length,
+    });
+  }
+
+  const obj = {
+    platform, chatId, snapshotKey,
+    sourceUrl:    msg.sourceUrl    || "",
+    sourceTitle:  msg.sourceTitle  || "",
+    scannedAt:    msg.scannedAt    || Date.now(),
+    liveReason:   msg.liveReason   || "live",
+    extractionStrategy: msg.extractionStrategy || "live-dom",
+    baselineEstablished: true,
+    baselineSource:      "live_update_after_baseline",
+    stats: {
+      total:      effectiveMessages.length,
+      userCount:  effectiveMessages.filter((m) => m.role === "user").length,
+      aiCount:    effectiveMessages.filter((m) => m.role === "assistant").length,
+      codeCount:  effectiveMessages.flatMap((m) => Array.isArray(m.codeBlocks) ? m.codeBlocks : []).length,
+      totalChars: effectiveMessages.reduce((sum, m) => sum + String(m.text || "").length, 0),
+    },
+    messages: effectiveMessages,
+  };
+  if (Array.isArray(msg.displayMessages) && msg.displayMessages.length) obj.displayMessages = msg.displayMessages;
+  if (Array.isArray(msg.rawMessages)     && msg.rawMessages.length)     obj.rawMessages     = msg.rawMessages;
+
+  activeSessions[String(tabId)] = {
+    ...activeSession,
+    tabId,
+    platform,
+    chatId,
+    snapshotKey,
+    sourceUrl: obj.sourceUrl,
+    lastUpdatedAt: Date.now(),
+    scanResult: obj,
+  };
+  await setActiveScanSessions(activeSessions);
+  console.log("[Engram][BG] live update applied to active session", {
+    tabId,
+    platform,
+    snapshotKey,
+    oldTotal,
+    newTotal: scanResultTotal(obj),
+  });
+  broadcastActiveScanSessionUpdated(tabId, activeSessions[String(tabId)]);
+
+  snapshotsByKey[snapshotKey] = obj;
+
+  const writes = platform === "chatgpt" ? {
+    "engramChatgptLatestScanResult":         obj,
+    "engramChatgptLatestSnapshot":           obj,
+    "engram:chatgpt:conversationSnapshot":   obj,
+    [byKeyStorageKey]:                       snapshotsByKey,
+  } : {
+    "engramClaudeLatestScanResult":          obj,
+    "engramClaudeLatestSnapshot":            obj,
+    "engram:claude:conversationSnapshot":    obj,
+    [byKeyStorageKey]:                       snapshotsByKey,
+  };
+  await storeApi.set(writes);
+  console.log("[Engram][BG] live scan persisted", `platform=${platform}`, `reason=${msg.liveReason}`, `snapshotKey=${snapshotKey}`, `messages=${msgs.length}`);
+  return {
+    ok: true,
+    hasActiveSession: true,
+    baselineEstablished: true,
+    activeSession: activeSessions[String(tabId)],
+    scanResult: obj,
+  };
 }
 
 async function handleGetState() {

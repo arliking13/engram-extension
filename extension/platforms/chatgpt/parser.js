@@ -33,6 +33,12 @@
   let _chatDirty               = false; // true when DOM has new messages since last accepted snapshot
   let _snapshotBaselineAt      = null;  // capturedAt of last accepted snapshot for current chat
   let _freshSnapInFlight       = null;  // { chatId, promise, cancel } | null — deduped in-flight fetch
+  let _loUserTimer    = null;  // setTimeout for user_committed persist
+  let _loAiTimer      = null;  // setTimeout for assistant_complete persist
+  let _loPrevUserCount = 0;   // userCount at last observer reset
+  let _loPrevAiCount   = 0;   // assistantCount at last observer reset
+  let _loNavTime       = 0;   // timestamp of last SPA navigation (grace window)
+  const _loSigByKey    = {};  // { snapshotKey: lastPersistedSignature }
 
   console.log("[Engram][ChatGPT] parser loaded");
   // Startup diagnostic: always logged so about:debugging confirms injection
@@ -336,6 +342,209 @@
       }
     });
     observer.observe(target, { childList: true, subtree: true });
+  }
+
+  // ── Live conversation observer ───────────────────────────────────────────
+  // Detects two events without requiring the popup to be open:
+  //
+  //   user_committed   — new [data-message-author-role="user"] node detected.
+  //                      Debounce 600 ms, then persist visible DOM extraction.
+  //
+  //   assistant_complete — new [data-message-author-role="assistant"] node OR
+  //                        mutations inside existing assistant nodes stop for 2 s.
+  //                        Then persist visible DOM extraction.
+  //
+  // Uses _loQuickExtract (DOM-only) instead of performScan so that stale
+  // data-layer / background-network snapshots from other conversations never
+  // pollute the live result.
+
+  const LO_NAV_GRACE_MS = 3000; // ignore events for 3 s after SPA navigation
+
+  function _loRoleCount(role) {
+    return document.querySelectorAll('[data-message-author-role="' + role + '"]').length;
+  }
+
+  function _loQuickExtract() {
+    const roleNodes = Array.from(document.querySelectorAll("[data-message-author-role]"));
+    roleNodes.sort((a, b) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1
+    );
+    const msgs = [];
+    for (const node of roleNodes) {
+      if (!isVisibleRoleNode(node)) continue;
+      const role = node.getAttribute("data-message-author-role");
+      if (role !== "user" && role !== "assistant") continue;
+      const contentEl = getContentElement(role, node);
+      const rawText = contentEl
+        ? (contentEl.innerText || contentEl.textContent || "").trim()
+        : (node.innerText || node.textContent || "").trim();
+      const text = cleanMessageText(rawText);
+      if (!text) continue;
+      msgs.push({
+        role, text,
+        codeBlocks: extractCodeBlocks(node),
+        timestamp:  Date.now(),
+        platform:   "chatgpt",
+      });
+    }
+    return msgs;
+  }
+
+  function _loHash(text) {
+    if (!text) return "";
+    return text.slice(0, 30) + "|" + text.slice(-30) + "|" + text.length;
+  }
+
+  function _loBuildSig(snapshotKey, msgs) {
+    if (!msgs.length) return "";
+    const last = msgs[msgs.length - 1];
+    const uc = msgs.filter(m => m.role === "user").length;
+    const ac = msgs.filter(m => m.role === "assistant").length;
+    return snapshotKey + "|" + msgs.length + "|" + uc + "|" + ac + "|" + last.role + "|" + _loHash(last.text);
+  }
+
+  async function _loPersist(liveReason) {
+    if (_wIsScanning) return;
+    const chatId      = getChatId();
+    const snapshotKey = chatId && chatId !== "unknown"
+      ? "chat:" + chatId
+      : "url:" + _wNormalizeUrl(location.href);
+    const sourceUrl   = location.href;
+
+    const msgs = _loQuickExtract();
+    if (!msgs.length) return;
+
+    const sig = _loBuildSig(snapshotKey, msgs);
+    if (_loSigByKey[snapshotKey] === sig) {
+      console.log("[Engram][Live][ChatGPT] skipped duplicate signature snapshotKey=" + snapshotKey);
+      return;
+    }
+    _loSigByKey[snapshotKey] = sig;
+
+    const userCount  = msgs.filter(m => m.role === "user").length;
+    const aiCount    = msgs.filter(m => m.role === "assistant").length;
+    const codeCount  = msgs.flatMap(m => m.codeBlocks).length;
+    const totalChars = msgs.reduce((s, m) => s + m.text.length, 0);
+
+    console.log("[Engram][Live] observer detected change", {
+      platform: "chatgpt",
+      reason: liveReason,
+      snapshotKey,
+      total: msgs.length,
+      userCount,
+      aiCount,
+      codeCount,
+    });
+    console.log("[Engram][Live][ChatGPT] persisted reason=" + liveReason +
+      " snapshotKey=" + snapshotKey + " messages=" + msgs.length);
+    try {
+      console.log("[Engram][Live] sending ENGRAM_LIVE_SCAN_COMPLETE", {
+        platform: "chatgpt",
+        reason: liveReason,
+        snapshotKey,
+        total: msgs.length,
+      });
+      const resp = await _wRuntimeSend({
+        type:               "ENGRAM_LIVE_SCAN_COMPLETE",
+        platform:           "chatgpt",
+        liveReason,
+        messages:           msgs,
+        chatId,
+        snapshotKey,
+        sourceUrl,
+        sourceTitle:        getChatTitle() || null,
+        scannedAt:          Date.now(),
+        total:              msgs.length,
+        userCount,
+        aiCount,
+        codeCount,
+        totalChars,
+        extractionStrategy: "live-dom-quick",
+      });
+      if (!resp || !resp.hasActiveSession) {
+        console.log("[Engram][Live][ChatGPT] skipped widget update: no active session snapshotKey=" + snapshotKey);
+        return;
+      }
+      // Update widget in-process — no storage round-trip needed
+      _wActiveSession = resp.activeSession || null;
+      _wLastKey = "";
+      console.log("[Engram][Widget] live update rendered", {
+        platform: "chatgpt",
+        snapshotKey,
+        total: _wActiveSession?.scanResult?.total || _wActiveSession?.scanResult?.stats?.total || 0,
+      });
+      if (_wEl) _wUpdate();
+    } catch (err) {
+      console.warn("[Engram][Live][ChatGPT] sendMessage failed:", err.message || err);
+    }
+  }
+
+  function _startLiveObserver() {
+    const target = document.body || document.documentElement;
+    if (!target) {
+      document.addEventListener("DOMContentLoaded", _startLiveObserver, { once: true });
+      return;
+    }
+
+    // Set initial baselines so hydration on page load doesn't trigger events
+    _loPrevUserCount = _loRoleCount("user");
+    _loPrevAiCount   = _loRoleCount("assistant");
+
+    const observer = new MutationObserver((mutations) => {
+      if (_wIsScanning) return;
+      // Ignore events during SPA navigation grace window
+      if (Date.now() < _loNavTime + LO_NAV_GRACE_MS) return;
+
+      const userCount = _loRoleCount("user");
+      const aiCount   = _loRoleCount("assistant");
+
+      // ── User message committed: new user node appeared ─────────────────
+      if (userCount > _loPrevUserCount) {
+        _loPrevUserCount = userCount;
+        console.log("[Engram][Live][ChatGPT] user_committed detected userCount=" + userCount +
+          " total=" + (userCount + aiCount));
+        if (_loUserTimer) { clearTimeout(_loUserTimer); _loUserTimer = null; }
+        if (_loAiTimer)   { clearTimeout(_loAiTimer);   _loAiTimer   = null; }
+        _loUserTimer = setTimeout(() => {
+          _loUserTimer = null;
+          _loPersist("user_committed");
+        }, 600);
+        return;
+      }
+
+      // ── Assistant message started or still streaming ───────────────────
+      let hasAssistantMutation = aiCount > _loPrevAiCount;
+      if (!hasAssistantMutation) {
+        for (const m of mutations) {
+          const nodes = [m.target, ...m.addedNodes];
+          for (const n of nodes) {
+            if (!n) continue;
+            const el = n.nodeType === Node.TEXT_NODE ? n.parentElement : (n.nodeType === Node.ELEMENT_NODE ? n : null);
+            if (el && el.closest && el.closest('[data-message-author-role="assistant"]')) {
+              hasAssistantMutation = true;
+              break;
+            }
+          }
+          if (hasAssistantMutation) break;
+        }
+      }
+
+      if (hasAssistantMutation) {
+        if (aiCount > _loPrevAiCount) {
+          _loPrevAiCount = aiCount;
+          console.log("[Engram][Live][ChatGPT] assistant_complete detected aiCount=" + aiCount +
+            " total=" + (userCount + aiCount));
+        }
+        if (_loAiTimer) { clearTimeout(_loAiTimer); _loAiTimer = null; }
+        _loAiTimer = setTimeout(() => {
+          _loAiTimer = null;
+          _loPersist("assistant_complete");
+        }, 2000);
+      }
+    });
+
+    observer.observe(target, { childList: true, subtree: true, characterData: true });
+    console.log("[Engram][ChatGPT] live observer started");
   }
 
   // ── Content element selection ─────────────────────────────────────────────
@@ -886,6 +1095,23 @@
   // ── Message handler ───────────────────────────────────────────────────────
 
   runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === "ENGRAM_ACTIVE_SCAN_SESSION_UPDATED") {
+      const currentKeys = _wCurrentSnapshotKeys();
+      if (msg.platform === "chatgpt" && msg.snapshotKey && currentKeys.includes(msg.snapshotKey)) {
+        _wActiveSession = msg.activeSession || null;
+        _wLastKey = "";
+        console.log("[Engram][Widget] live update rendered", {
+          platform: "chatgpt",
+          snapshotKey: msg.snapshotKey,
+          total: msg.scanResult?.total || msg.scanResult?.stats?.total || 0,
+        });
+        if (_wEl) _wUpdate();
+      }
+      if (isFirefox) return Promise.resolve({ ok: true });
+      sendResponse({ ok: true });
+      return true;
+    }
+
     // Background push: network-captured conversation snapshot
     if (msg.type === "ENGRAM_CHATGPT_BG_SNAPSHOT") {
       if (msg.snapshot) {
@@ -895,6 +1121,19 @@
           `chatId=${msg.snapshot.chatId}`,
           `messages=${msg.snapshot.messages?.length}`
         );
+      }
+      if (isFirefox) return Promise.resolve({ ok: true });
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    if (msg.type === "ENGRAM_BASELINE_ESTABLISHED") {
+      const snapshotKey = msg.snapshotKey;
+      const currentKeys = _wCurrentSnapshotKeys();
+      if (snapshotKey && currentKeys.includes(snapshotKey)) {
+        console.log("[Engram][ChatGPT] baseline established snapshotKey=" + snapshotKey);
+        _wLastKey = "";
+        if (_wEl) _wUpdate();
       }
       if (isFirefox) return Promise.resolve({ ok: true });
       sendResponse({ ok: true });
@@ -975,6 +1214,7 @@
   let _wPos       = null;
   let _wSnapshot  = null;
   let _wSnapshotsByChatId = {};
+  let _wActiveSession = null;
 
   let _wDragging    = false;
   let _wDragMoved   = false;
@@ -1052,14 +1292,52 @@
     return keys;
   }
 
-  function _wFindExactSnapshot() {
-    const keys = _wCurrentSnapshotKeys();
-    for (const key of keys) {
-      if (_wSnapshotsByChatId[key] && _wMatchesCurrentChat(_wSnapshotsByChatId[key])) {
-        return _wSnapshotsByChatId[key];
-      }
+  function _wCurrentSnapshotKey() {
+    return _wCurrentSnapshotKeys()[0] || "url:" + _wNormalizeUrl(window.location.href);
+  }
+
+  function _wRuntimeSend(message) {
+    if (isFirefox) return runtime.sendMessage(message).catch(() => null);
+    return new Promise((resolve) => {
+      runtime.sendMessage(message, (response) => {
+        void chrome.runtime.lastError;
+        resolve(response || null);
+      });
+    });
+  }
+
+  async function _wRefreshActiveSession() {
+    const snapshotKey = _wCurrentSnapshotKey();
+    const response = await _wRuntimeSend({
+      type: "ENGRAM_GET_ACTIVE_SCAN_SESSION",
+      platform: "chatgpt",
+      snapshotKey,
+    });
+    const hasActiveSession = !!response?.hasActiveSession;
+    console.log("[Engram][Widget] active scan session check", {
+      platform: "chatgpt",
+      snapshotKey,
+      hasActiveSession,
+    });
+    if (!hasActiveSession) {
+      _wActiveSession = null;
+      console.log("[Engram][Widget] scan required: no active session", {
+        platform: "chatgpt",
+        snapshotKey,
+      });
+      return null;
     }
-    return _wMatchesCurrentChat(_wSnapshot) ? _wSnapshot : null;
+    _wActiveSession = response.activeSession || null;
+    console.log("[Engram][Widget] rendered active session", {
+      platform: "chatgpt",
+      snapshotKey,
+      total: _wActiveSession?.scanResult?.total || _wActiveSession?.scanResult?.stats?.total || 0,
+    });
+    return _wActiveSession;
+  }
+
+  function _wFindExactSnapshot() {
+    return _wActiveSession?.scanResult || null;
   }
 
   function _wSnapshotColor(label) {
@@ -1086,28 +1364,31 @@
     // ChatGPT virtualizes the DOM: visible node count is far lower than the real
     // message count for heavy chats. Never derive health from DOM nodes alone —
     // show a neutral "scan needed" prompt instead of a misleading health label.
-    return { mode: "scan-needed", hasData: true };
+    return { mode: "scan-needed", hasData: false };
   }
 
   function _wStats() {
     if (_wIsScanning) return { mode: "scanning", hasData: true };
     const exactSnapshot = _wFindExactSnapshot();
-    if (!exactSnapshot) return _wLiveStats();
+    if (!exactSnapshot) return { mode: "scan-needed", hasData: false };
 
     const stats = exactSnapshot.stats || {};
-    const label = exactSnapshot.healthLabel || exactSnapshot.statusLabel || "Not scanned";
+    const total = stats.total || exactSnapshot.total || 0;
+    const code = stats.codeCount || exactSnapshot.codeCount || 0;
+    const status = _wLiveStatus(total, code);
+    const label = exactSnapshot.healthLabel || exactSnapshot.statusLabel || status.label;
     return {
       mode:     "exact",
       hasData:  true,
-      total:    stats.total     || 0,
-      user:     stats.userCount || 0,
-      ai:       stats.aiCount   || 0,
-      code:     stats.codeCount || 0,
+      total,
+      user:     stats.userCount || exactSnapshot.userCount || 0,
+      ai:       stats.aiCount   || exactSnapshot.aiCount   || 0,
+      code,
       label,
-      color:    exactSnapshot.healthColor || _wSnapshotColor(label),
+      color:    exactSnapshot.healthColor || status.color || _wSnapshotColor(label),
       risk:     exactSnapshot.migrationRisk || "—",
       load:     exactSnapshot.browserLoad   || "—",
-      source:   "Last scan",
+      source:   "Active scan",
       time:     _wFormatTime(exactSnapshot.scannedAt),
       scannedAt: exactSnapshot.scannedAt || 0,
     };
@@ -1115,6 +1396,29 @@
 
   function _wRender(st) {
     if (!_wEl) return;
+
+    if (st.mode === "scan-needed" && _wCollapsed) {
+      _wEl.innerHTML =
+        "<div class='ew-row-compact' title='Click Scan Chat in the Engram popup for accurate results'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<span class='ew-dot'>&#xB7;</span>" +
+          "<span class='ew-muted'>Scan required</span>" +
+        "</div>";
+      return;
+    }
+
+    if (st.mode === "scan-needed") {
+      _wEl.innerHTML =
+        "<div class='ew-head'>" +
+          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
+          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
+        "</div>" +
+        "<div class='ew-body'>" +
+          "<div class='ew-hint ew-hint-expanded'>Not scanned. Click <b>Scan</b> in the Engram popup to start live tracking.</div>" +
+        "</div>";
+      _wEl.querySelector(".ew-close").onclick = _wToggle;
+      return;
+    }
 
     if (!st.hasData && _wCollapsed) {
       _wEl.innerHTML =
@@ -1157,29 +1461,6 @@
         "</div>" +
         "<div class='ew-body'>" +
           "<div class='ew-hint ew-hint-expanded'>Scan in progress&#x2026;</div>" +
-        "</div>";
-      _wEl.querySelector(".ew-close").onclick = _wToggle;
-      return;
-    }
-
-    if (st.mode === "scan-needed" && _wCollapsed) {
-      _wEl.innerHTML =
-        "<div class='ew-row-compact' title='Click Scan Chat in the Engram popup for accurate results'>" +
-          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
-          "<span class='ew-dot'>&#xB7;</span>" +
-          "<span class='ew-muted'>Scan needed</span>" +
-        "</div>";
-      return;
-    }
-
-    if (st.mode === "scan-needed") {
-      _wEl.innerHTML =
-        "<div class='ew-head'>" +
-          "<span class='ew-logo'>" + _wLogoImg + "Engram</span>" +
-          "<button class='ew-close' title='Collapse'>&#x2212;</button>" +
-        "</div>" +
-        "<div class='ew-body'>" +
-          "<div class='ew-hint ew-hint-expanded'>Click <b>Scan Chat</b> in the Engram popup for accurate health and message count.</div>" +
         "</div>";
       _wEl.querySelector(".ew-close").onclick = _wToggle;
       return;
@@ -1245,17 +1526,18 @@
         "<div class='ew-kv'><span class='ew-k'>Messages</span><span class='ew-v'>" + st.total + "</span></div>" +
         "<div class='ew-kv'><span class='ew-k'>Code blocks</span><span class='ew-v'>" + st.code + "</span></div>" +
         "<div class='ew-kv'><span class='ew-k'>Accuracy</span><span class='ew-v'>Full scan</span></div>" +
-        "<div class='ew-time'>Last scan: " + st.time + "</div>" +
+        "<div class='ew-time'>Active scan: " + st.time + "</div>" +
       "</div>";
     _wEl.querySelector(".ew-close").onclick = _wToggle;
   }
 
-  function _wUpdate() {
+  async function _wUpdate() {
     if (!_wEl) return;
+    await _wRefreshActiveSession();
     const st  = _wStats();
     const key = st.hasData
       ? (st.mode + "|" + st.label + "|" + (st.risk || "") + "|" + (st.load || "") + "|" + st.total + "|" + st.user + "|" + st.ai + "|" + st.code + "|" + (st.scannedAt || "") + "|" + _wCollapsed)
-      : ("empty|" + _wCollapsed);
+      : ((st.mode || "empty") + "|" + _wCollapsed);
     if (key === _wLastKey) return;
     _wLastKey = key;
     _wRender(st);
@@ -1400,16 +1682,10 @@
       const keys = [
         "engramWidgetCollapsed",
         "engramWidgetPos",
-        "engramLastHealthSnapshot",
-        "engramHealthSnapshotsByChatId",
       ];
       const cb = (result) => {
         if (result) {
           if ("engramWidgetCollapsed" in result) _wCollapsed = !!result.engramWidgetCollapsed;
-          if ("engramLastHealthSnapshot" in result) _wSnapshot = result.engramLastHealthSnapshot || null;
-          if ("engramHealthSnapshotsByChatId" in result) {
-            _wSnapshotsByChatId = result.engramHealthSnapshotsByChatId || {};
-          }
           const pos = result.engramWidgetPos;
           if (pos && typeof pos.left === "number" && typeof pos.top === "number") {
             _wApplyPos(pos.left, pos.top);
@@ -1443,17 +1719,8 @@
         if (!enabled && _wEl)  { _wRemove(); }
       });
       onChanged.addListener((changes, area) => {
-        if (area !== "local") return;
-        let changed = false;
-        if (changes.engramLastHealthSnapshot) {
-          _wSnapshot = changes.engramLastHealthSnapshot.newValue || null;
-          changed = true;
-        }
-        if (changes.engramHealthSnapshotsByChatId) {
-          _wSnapshotsByChatId = changes.engramHealthSnapshotsByChatId.newValue || {};
-          changed = true;
-        }
-        if (!changed) return;
+        if (area !== "local" && area !== "session") return;
+        if (!changes["engram:runtime:activeScanSessions"]) return;
         _wLastKey = "";
         if (_wEl) _wUpdate();
       });
@@ -1471,13 +1738,20 @@
     _chatDirty              = false; // new chat starts clean; MO re-arms automatically
     _snapshotBaselineAt     = null;  // reset so dirty observer ignores initial hydration
     if (_freshSnapInFlight) { _freshSnapInFlight.cancel(); _freshSnapInFlight = null; }
+    if (_loUserTimer) { clearTimeout(_loUserTimer); _loUserTimer = null; }
+    if (_loAiTimer)   { clearTimeout(_loAiTimer);   _loAiTimer   = null; }
+    _loNavTime       = Date.now();
+    _loPrevUserCount = document.querySelectorAll('[data-message-author-role="user"]').length;
+    _loPrevAiCount   = document.querySelectorAll('[data-message-author-role="assistant"]').length;
     _wIsScanning = false;
+    _wActiveSession = null;
     _wLastKey = "";
     console.log(
       "[Engram][ChatGPT] SPA navigation detected",
       "chatId=" + getChatId(),
       "href=" + currentHref
     );
+    if (_wEl) _wUpdate();
   }, 500);
 
   // Widget health tick: re-inject if React's reconciler removed the widget node.
@@ -1498,5 +1772,6 @@
   else { document.addEventListener("DOMContentLoaded", _wBootstrap); }
 
   _startDirtyObserver();
+  _startLiveObserver();
 
 })();
