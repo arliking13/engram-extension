@@ -2668,6 +2668,79 @@ h3 {
   }
 }
 
+@media (max-width: 900px) {
+  .section {
+    width: min(calc(100% - 36px), var(--page-max));
+    padding: 42px 0;
+  }
+
+  .section-heading {
+    gap: 7px;
+    margin-bottom: 18px;
+  }
+
+  .section-heading p,
+  .privacy-card p,
+  .platform-card p,
+  .cta-panel p,
+  .preview-card p,
+  .solution-strip span {
+    max-width: 64ch;
+    font-size: 15.5px;
+    line-height: 1.62;
+  }
+
+  h2 {
+    font-size: clamp(26px, 5.6vw, 38px);
+  }
+
+  .pain-grid,
+  .use-case-grid,
+  .feature-grid,
+  .submission-grid,
+  .tech-grid,
+  .criteria-grid,
+  .workflow,
+  .linkedin-workflow,
+  .job-mock-grid,
+  .preview-grid {
+    gap: 10px;
+  }
+
+  .pain-card,
+  .use-card,
+  .feature-card,
+  .submission-card,
+  .tech-card,
+  .criteria-card,
+  .workflow li,
+  .linkedin-step,
+  .preview-card,
+  .job-mock-card {
+    padding: 18px;
+  }
+
+  .pain-card span,
+  .submission-card span,
+  .tech-card span,
+  .criteria-card span,
+  .icon-dot {
+    margin-bottom: 18px;
+  }
+
+  .linkedin-flow-section {
+    padding: 40px 22px;
+  }
+
+  .linkedin-page-context {
+    min-height: auto;
+  }
+
+  .linkedin-page-shell {
+    min-height: auto;
+  }
+}
+
 @media (max-width: 760px), (pointer: coarse) {
   body {
     background:
@@ -2774,6 +2847,224 @@ h3 {
 
   .button {
     min-height: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-header {
+    height: 56px;
+  }
+
+  .header-links .button {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .hero {
+    padding-top: 82px;
+    padding-bottom: 34px;
+  }
+
+  .hero-content {
+    padding-top: 0;
+  }
+
+  .hero-brand-icon {
+    width: 50px;
+    height: 50px;
+    margin-bottom: 10px;
+  }
+
+  .badge {
+    margin-bottom: 12px;
+    padding: 6px 10px;
+  }
+
+  .eyebrow {
+    margin-bottom: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  h1 {
+    margin-bottom: 8px;
+    font-size: clamp(40px, 14vw, 58px);
+    line-height: 0.96;
+  }
+
+  .hero-line {
+    max-width: 12em;
+    margin-bottom: 10px;
+    font-size: clamp(21px, 7vw, 28px);
+    line-height: 1.12;
+  }
+
+  .hero-copy {
+    max-width: 34rem;
+    margin-bottom: 0;
+    font-size: 15.5px;
+    line-height: 1.62;
+  }
+
+  .hero-actions {
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .hero-scene {
+    margin-top: 22px;
+  }
+
+  .hero .product-console {
+    max-width: 342px;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .hero .product-console .popup-health-panel,
+  .hero .product-console .popup-package-card,
+  .hero .product-console .popup-secondary-actions {
+    display: none;
+  }
+
+  .hero .popup-gauge-card {
+    padding: 8px 8px 6px;
+  }
+
+  .hero .popup-gauge-wrap {
+    width: 154px;
+    height: 82px;
+  }
+
+  .hero .popup-gauge-svg {
+    width: 154px;
+    height: 85px;
+  }
+
+  .hero .popup-stats div {
+    padding: 8px 4px;
+  }
+
+  .compatible-row,
+  .support-note,
+  .creator-links {
+    gap: 7px;
+    margin-top: 12px;
+  }
+
+  .section {
+    width: min(calc(100% - 30px), var(--page-max));
+    padding: 30px 0;
+  }
+
+  .section-heading {
+    margin-bottom: 16px;
+  }
+
+  .section-heading.compact {
+    text-align: left;
+  }
+
+  .hackathon-fit-section,
+  .linkedin-flow-section {
+    padding: 28px 16px;
+    border-radius: 20px;
+  }
+
+  .editorial-break {
+    width: min(calc(100% - 30px), var(--page-max));
+    padding: 28px 8px;
+  }
+
+  .editorial-break p {
+    font-size: clamp(18px, 6vw, 24px);
+    line-height: 1.28;
+  }
+
+  .card {
+    border-radius: 14px;
+  }
+
+  .pain-card,
+  .use-card,
+  .feature-card,
+  .submission-card,
+  .tech-card,
+  .criteria-card,
+  .workflow li,
+  .linkedin-step,
+  .preview-card,
+  .job-mock-card,
+  .privacy-card,
+  .platform-card,
+  .cta-panel,
+  .mvp-includes,
+  .demo-links {
+    padding: 16px;
+  }
+
+  .pain-card p,
+  .use-card p,
+  .feature-card p,
+  .submission-card p,
+  .tech-card p,
+  .criteria-card p,
+  .linkedin-step p {
+    font-size: 14.5px;
+    line-height: 1.56;
+  }
+
+  .solution-strip,
+  .demo-links,
+  .continuity-bridge,
+  .mvp-includes {
+    margin-top: 10px;
+  }
+
+  .demo-flow {
+    gap: 8px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .demo-flow span {
+    padding: 9px 11px;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+
+  .linkedin-page-shell {
+    gap: 10px;
+  }
+
+  .linkedin-job-list,
+  .linkedin-detail-panel,
+  .engram-docked-widget {
+    padding: 12px;
+  }
+
+  .linkedin-detail-panel h3 {
+    font-size: 18px;
+  }
+
+  .job-description-lines i:nth-child(n + 4),
+  .linkedin-list-card:nth-of-type(n + 4) {
+    display: none;
+  }
+
+  .preview-grid .mock-popup-real {
+    padding: 12px;
+  }
+
+  .privacy-card,
+  .platform-card,
+  .cta-panel {
+    gap: 16px;
+  }
+
+  .site-footer {
+    padding-bottom: 28px;
   }
 }
 
@@ -2948,6 +3239,50 @@ h3 {
 
   .footer-links {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand-mark {
+    box-shadow: none;
+  }
+
+  .hero {
+    padding-inline: 15px;
+  }
+
+  .hero-copy,
+  .section-heading p,
+  .privacy-card p,
+  .platform-card p,
+  .cta-panel p,
+  .preview-card p,
+  .workflow p,
+  .solution-strip span {
+    font-size: 14.5px;
+  }
+
+  .button {
+    min-height: 46px;
+    padding-inline: 14px;
+  }
+
+  .platform-chip,
+  .support-note span,
+  .creator-links a,
+  .built-by a {
+    font-size: 12.5px;
+  }
+
+  .video-wrap {
+    border-radius: 12px;
+  }
+
+  .archive-head,
+  .linkedin-source-panel,
+  .archive-toolbar,
+  .continuity-bridge {
+    gap: 10px;
   }
 }
 
