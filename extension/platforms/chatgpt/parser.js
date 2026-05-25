@@ -267,24 +267,6 @@
     return "";
   }
 
-  // Per-message fingerprint for DOM tail dedup: role + first/last 100 chars + length.
-  function _msgFingerprint(msg) {
-    const role = msg?.role || "";
-    const text = (msg?.text || "").trim();
-    return role + "|" + text.slice(0, 100) + "|" + text.slice(-100) + "|" + text.length;
-  }
-
-  // Remove duplicate messages by fingerprint (order preserved, first occurrence wins).
-  function dedupeMessages(msgs) {
-    const seen = new Set();
-    return msgs.filter((m) => {
-      const fp = _msgFingerprint(m);
-      if (seen.has(fp)) return false;
-      seen.add(fp);
-      return true;
-    });
-  }
-
   // Fingerprint of the last visible [data-message-author-role] node in the DOM.
   function _visibleLastMsgFingerprint() {
     const nodes = document.querySelectorAll("[data-message-author-role]");
@@ -448,51 +430,6 @@
     );
 
     return messages;
-  }
-
-  // Merge freshly visible DOM messages on top of a base snapshot to capture
-  // turns added after the last data-layer capture, e.g. when a forced fetch
-  // returns 404 and the snapshot cannot be refreshed via the network bridge.
-  function extractDomTail(baseMessages) {
-    const domMsgs = extractMessages();
-    if (!domMsgs.length) return [];
-
-    // Build fingerprint set from the last 50 base messages for overlap detection.
-    const base50      = Array.isArray(baseMessages) ? baseMessages.slice(-50) : [];
-    const base50FpSet = new Set(base50.map(_msgFingerprint));
-
-    // Walk DOM messages from the end to find the last one that exists in base.
-    let overlapIdx = -1;
-    for (let i = domMsgs.length - 1; i >= 0; i--) {
-      if (base50FpSet.has(_msgFingerprint(domMsgs[i]))) {
-        overlapIdx = i;
-        break;
-      }
-    }
-
-    if (overlapIdx >= 0) {
-      const tail = domMsgs.slice(overlapIdx + 1);
-      console.log(
-        "[Engram][ChatGPT] extractDomTail:",
-        `overlapAt=${overlapIdx}`,
-        `domTotal=${domMsgs.length}`,
-        `tail=${tail.length}`
-      );
-      return tail;
-    }
-
-    // No overlap found — return only DOM messages absent from the full base
-    // snapshot to avoid re-appending old visible messages.
-    const allBaseFpSet = new Set(
-      (Array.isArray(baseMessages) ? baseMessages : []).map(_msgFingerprint)
-    );
-    const novel = domMsgs.filter((m) => !allBaseFpSet.has(_msgFingerprint(m)));
-    console.log(
-      "[Engram][ChatGPT] extractDomTail (no-overlap fallback):",
-      `domTotal=${domMsgs.length}`,
-      `novel=${novel.length}`
-    );
-    return novel;
   }
 
   // ── Chat metadata ─────────────────────────────────────────────────────────
@@ -858,33 +795,6 @@
       }
     }
 
-    // DOM tail merge: if _chatDirty is still true after tier selection the
-    // background fetch returned 404 or a stale snapshot. Merge the fresh
-    // visible DOM tail into the existing base to capture new turns without
-    // losing the full conversation history from the data-layer snapshot.
-    if (_chatDirty && Array.isArray(messages) && messages.length > 0 &&
-        extractionStrategy !== "chatgpt-background-network") {
-      const tail = extractDomTail(messages);
-      if (tail.length > 0) {
-        const baseCount = messages.length;
-        messages = dedupeMessages([...messages, ...tail]);
-        extractionStrategy = "chatgpt-data-layer-plus-dom-tail";
-        partial = false;
-        _chatDirty = false;
-        _snapshotBaselineAt = Date.now();
-        _wLastKey = ""; // force widget repaint after merge
-        if (_wEl) _wUpdate();
-        console.log(
-          "[Engram][ChatGPT] DOM tail merge complete:",
-          `base=${baseCount}`,
-          `tail=${tail.length}`,
-          `merged=${messages.length}`
-        );
-      } else {
-        console.log("[Engram][ChatGPT] DOM tail merge: no new tail, keeping base snapshot");
-      }
-    }
-
     const scanDuration = Math.round(performance.now() - t0);
 
     // Pass 1: filter structural/null nodes (empty text AND no code blocks).
@@ -1181,7 +1091,6 @@
 
   function _wStats() {
     if (_wIsScanning) return { mode: "scanning", hasData: true };
-    if (_chatDirty)   return { mode: "scan-needed", hasData: true };
     const exactSnapshot = _wFindExactSnapshot();
     if (!exactSnapshot) return _wLiveStats();
 

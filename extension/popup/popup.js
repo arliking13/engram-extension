@@ -557,6 +557,68 @@ function saveHealthSnapshot(sr, hd) {
   });
 }
 
+async function persistScanResult(result) {
+  if (!result) return;
+  const msgs = result.messages || [];
+  if (msgs.length === 0) return; // never overwrite a stored snapshot with an empty result
+
+  const platform = getPlatformId(result);
+  if (platform !== "chatgpt" && platform !== "claude") return;
+
+  const snapshotKey = getHealthSnapshotKey(result);
+  const obj = {
+    platform,
+    chatId:      result.chatId    || "unknown",
+    snapshotKey,
+    sourceUrl:   result.url       || "",
+    sourceTitle: result.sourceTitle || "",
+    scannedAt:   result.scannedAt || Date.now(),
+    extractionStrategy: result.extractionStrategy || "",
+    stats: {
+      total:      result.total      || msgs.length,
+      userCount:  result.userCount  || 0,
+      aiCount:    result.aiCount    || 0,
+      codeCount:  result.codeCount  || 0,
+      totalChars: result.totalChars || 0,
+    },
+    messages: msgs,
+  };
+
+  if (result.displayMessages && result.displayMessages.length > 0) {
+    obj.displayMessages = result.displayMessages;
+  }
+  if (result.rawMessages && result.rawMessages.length > 0) {
+    obj.rawMessages = result.rawMessages;
+  }
+
+  let writes;
+  if (platform === "chatgpt") {
+    writes = {
+      "engramChatgptLatestScanResult":        obj,
+      "engramChatgptLatestSnapshot":          obj,
+      "engram:chatgpt:conversationSnapshot":  obj,
+    };
+  } else {
+    writes = {
+      "engramClaudeLatestScanResult":       obj,
+      "engramClaudeLatestSnapshot":         obj,
+      "engram:claude:conversationSnapshot": obj,
+    };
+  }
+
+  try {
+    await storageSet(writes);
+    console.log(
+      "[Engram] scan result persisted",
+      `platform=${platform}`,
+      `chatId=${obj.chatId}`,
+      `messages=${msgs.length}`
+    );
+  } catch (e) {
+    console.warn("[Engram] scan result persist failed", e);
+  }
+}
+
 function normalizeHealthSnapshotUrl(url) {
   try {
     const parsed = new URL(url);
@@ -884,7 +946,6 @@ function computeHealthFromScan(sr) {
   const userText = msgs.filter(m => m.role === "user").map(m => m.text || "").join(" ").toLowerCase();
   const correctionPhrases = [
     "actually,", "wait,", "no,", "instead,", "let's reset", "start over", "ignore that", "scratch that", "never mind",
-    "ты не понял", "не так", "давай иначе", "снова", "ты усложняешь", "не то", "зачем ты", "мы же", "я уже говорил", "ты не ответил", "не выдумывай",
   ];
   const correctionCount = correctionPhrases.reduce((n, p) => n + (userText.split(p).length - 1), 0);
   const continuityRiskPressure = Math.min(100, correctionCount >= 10 ? 40 : correctionCount >= 5 ? 25 : correctionCount >= 2 ? 10 : 0);
@@ -1445,6 +1506,7 @@ on("btnScan", "click", async () => {
 
         updateChatTitleEl(response.sourceTitle || null);
         renderDone("scan-complete");
+        persistScanResult(response);
 
         loadState(); // Refresh gauge
       }
@@ -1472,6 +1534,7 @@ _api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     updateChatTitleEl(msg.sourceTitle || null);
     renderDone("scan-complete-message");
+    persistScanResult(msg);
 
     loadState(); // Refresh gauge
   }
