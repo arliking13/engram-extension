@@ -47,6 +47,11 @@
     );
   }
 
+  // Debug flag — set to true locally to enable verbose scan diagnostics.
+  // Must remain false in committed code to avoid console spam.
+  const ENGRAM_DEBUG_CHATGPT = false;
+  function _dbg(...args) { if (ENGRAM_DEBUG_CHATGPT) console.log("[Engram][ChatGPT][debug]", ...args); }
+
   // ── Text helpers ──────────────────────────────────────────────────────────
 
   function isVisibleRoleNode(node) {
@@ -277,14 +282,19 @@
   }
 
   // Adaptive timeout based on how large the cached snapshot already is.
-  // If no snapshot (new chat), default to medium (10 s).
-  function _adaptiveTimeout(cachedSnap) {
+  // When no cache exists, fall back to visible DOM node count as a size proxy.
+  function _adaptiveTimeout(cachedSnap, domNodeCount) {
     const rawCount   = cachedSnap?.messages?.length || 0;
     const totalChars = Array.isArray(cachedSnap?.messages)
       ? cachedSnap.messages.reduce((s, m) => s + (m.text?.length || 0), 0)
       : 0;
     if (rawCount >= 300 || totalChars >= 300_000) return 20_000; // huge
     if (rawCount >= 80  || totalChars >= 80_000)  return 10_000; // medium
+    if (!cachedSnap) {
+      const dn = domNodeCount || 0;
+      if (dn >= 200) return 20_000; // heavy DOM, no prior cache
+      if (dn >= 100) return 10_000;
+    }
     return 4_000; // small
   }
 
@@ -511,12 +521,22 @@
 
   // Interactive soft budget: how long to wait before returning cached/DOM result.
   // The background fetch keeps running after this expires.
-  function _softBudget(cachedSnap) {
+  // When no cache exists, DOM node count proxies the chat size so heavy chats
+  // get enough time for the API fetch to complete instead of falling back to a
+  // partial virtualized-DOM extraction.
+  function _softBudget(cachedSnap, domNodeCount) {
     const rawCount   = cachedSnap?.messages?.length || 0;
     const totalChars = Array.isArray(cachedSnap?.messages)
       ? cachedSnap.messages.reduce((s, m) => s + (m.text?.length || 0), 0) : 0;
     if (rawCount >= 300 || totalChars >= 300_000) return 18_000; // huge: allow long wait
     if (rawCount >= 80  || totalChars >= 80_000)  return 1_500;  // medium: 1.5 s
+    if (!cachedSnap) {
+      // No prior snapshot — use DOM node count as size proxy for first-scan heavy chats.
+      // 800 ms was too short for heavy chats where API fetch takes 1-5 s.
+      const dn = domNodeCount || 0;
+      if (dn >= 200) return 12_000; // huge DOM → long wait
+      if (dn >= 100) return  6_000; // large DOM → moderate wait
+    }
     return 800; // small: 0.8 s
   }
 
@@ -614,6 +634,9 @@
       } catch (_) {}
     }
 
+    _dbg("tier1 BG snapshot", { available: !!bgSnapshot, matches: bgSnapshot ? snapshotMatchesCurrentChat(bgSnapshot) : false,
+      chatId: bgSnapshot?.chatId, msgs: bgSnapshot?.messages?.length });
+
     if (bgSnapshot && snapshotMatchesCurrentChat(bgSnapshot)) {
       messages = bgSnapshot.messages;
       extractionStrategy = "chatgpt-background-network";
@@ -627,6 +650,9 @@
       // ── Tier 2 / 3: data-layer snapshot or DOM fallback ──────────────────
       const freshChatId   = getChatId();
       const cachedSnap    = getMatchingDataLayerSnapshot();
+      // Compute DOM node count here so _softBudget/_adaptiveTimeout can use it
+      // to size the wait budget for heavy first-scan chats (no cache available).
+      const domNodeCount  = document.querySelectorAll("[data-message-author-role]").length;
 
       // Hash-based dirty check
       if (!_chatDirty && cachedSnap) {
@@ -640,8 +666,8 @@
 
       const snapshotIsRecent = isSnapshotRecent(cachedSnap);
       const needFresh        = _chatDirty || !snapshotIsRecent;
-      const baseTimeoutMs    = _adaptiveTimeout(cachedSnap);
-      const softBudgetMs     = _softBudget(cachedSnap);
+      const baseTimeoutMs    = _adaptiveTimeout(cachedSnap, domNodeCount);
+      const softBudgetMs     = _softBudget(cachedSnap, domNodeCount);
       const waitBudgetMs     = isExport ? baseTimeoutMs : softBudgetMs;
       const tierLabel        = baseTimeoutMs >= 15_000 ? "huge" : baseTimeoutMs >= 8_000 ? "medium" : "small";
 
@@ -651,9 +677,12 @@
         `dirty=${_chatDirty}`,
         `recent=${snapshotIsRecent}`,
         `tier=${tierLabel}`,
+        `domNodes=${domNodeCount}`,
         `softBudget=${softBudgetMs}ms`,
         `hardTimeout=${baseTimeoutMs}ms`
       );
+      _dbg("scan start", { chatId: freshChatId, url: location.href, mode: isExport ? "export" : "interactive",
+        domNodes: domNodeCount, cachedSnap: !!cachedSnap, dirty: _chatDirty, recent: snapshotIsRecent });
 
       if (!needFresh) {
         // Clean + recent: use immediately, no network fetch
@@ -663,24 +692,66 @@
           extractionStrategy = "chatgpt-data-layer";
           partial = false;
           console.log("[Engram][ChatGPT] fast scan using cached snapshot");
+          _dbg("source=data-layer-cache", { msgs: messages.length });
         } else {
           messages = extractMessages();
           console.log("[Engram][ChatGPT] fast scan using visible DOM bootstrap");
+          _dbg("source=dom-fast", { msgs: messages.length });
         }
       } else {
-        const domNodeCount = document.querySelectorAll("[data-message-author-role]").length;
-
         if (!isExport && !cachedSnap && domNodeCount < 100) {
-          // Interactive, no prior cache, small visible DOM:
-          // return DOM result immediately and pre-warm the snapshot in background.
+          // Interactive, no prior cache, small visible DOM.
+          // Extract DOM first for fast response on small/short chats.
           messages = extractMessages();
           console.log("[Engram][ChatGPT] fast scan using visible DOM bootstrap");
-          if (freshChatId !== "unknown") _ensureFreshFetch(freshChatId);
+          _dbg("source=dom-fast-attempt", { msgs: messages.length, domNodes: domNodeCount });
+
+          if (messages.length === 0 && freshChatId !== "unknown") {
+            // DOM returned nothing but chatId is valid — heavy chat whose DOM hasn't
+            // rendered yet (SPA hydration lag) or whose initial fetch was served by a
+            // service worker before the page-bridge loaded.
+            // Trigger an explicit API fetch and wait for the real snapshot instead of
+            // returning a zero-count partial that would show incorrect health in the popup.
+            const zeroDomBudget = 10_000;
+            console.log(
+              "[Engram][ChatGPT] DOM=0 with valid chatId — awaiting fresh snapshot",
+              `chat=${freshChatId}`, `budget=${zeroDomBudget}ms`
+            );
+            _dbg("zero-dom-rescue start", { chatId: freshChatId, budget: zeroDomBudget });
+            const freshSnap = await Promise.race([
+              _ensureFreshFetch(freshChatId),
+              _timeoutPromise(zeroDomBudget),
+            ]);
+            if (freshSnap) {
+              dataLayerSnapshot = freshSnap;
+              messages = freshSnap.messages;
+              extractionStrategy = "chatgpt-data-layer";
+              partial = false;
+              console.log("[Engram][ChatGPT] zero-DOM rescue: fresh snapshot msgs=" + messages.length);
+              _dbg("zero-dom-rescue resolved", { msgs: messages.length });
+            } else {
+              // Last chance: session storage may have been updated while we waited
+              dataLayerSnapshot = getMatchingDataLayerSnapshot();
+              if (dataLayerSnapshot) {
+                messages = dataLayerSnapshot.messages;
+                extractionStrategy = "chatgpt-data-layer";
+                partial = false;
+                console.log("[Engram][ChatGPT] zero-DOM rescue: session snapshot found msgs=" + messages.length);
+                _dbg("zero-dom-rescue session", { msgs: messages.length });
+              } else {
+                console.log("[Engram][ChatGPT] zero-DOM rescue timed out — likely genuine new/empty chat");
+                _dbg("zero-dom-rescue timeout", { budget: zeroDomBudget });
+              }
+            }
+          } else if (freshChatId !== "unknown") {
+            _ensureFreshFetch(freshChatId); // pre-warm for next scan
+          }
         } else {
           // Race fresh fetch against budget.
           // Interactive: soft budget (returns cached/DOM if expires; fetch continues).
           // Export: hard timeout (waits longer for correctness).
           console.log(`[Engram][ChatGPT] requesting fresh conversation snapshot for scan chat=${freshChatId}`);
+          _dbg("fresh-fetch start", { chatId: freshChatId, budget: waitBudgetMs, domNodes: domNodeCount });
           let freshSnap = null;
           if (freshChatId !== "unknown") {
             freshSnap = await Promise.race([
@@ -694,10 +765,13 @@
               "[Engram][ChatGPT] fresh conversation snapshot received:",
               `raw=${freshSnap.messages?.length}`, `capturedAt=${freshSnap.capturedAt}`
             );
+            _dbg("fresh-fetch resolved", { msgs: freshSnap.messages?.length });
           } else if (isExport) {
             console.log("[Engram][ChatGPT] fresh snapshot timeout; using cached snapshot");
+            _dbg("fresh-fetch hard-timeout", { budget: waitBudgetMs });
           } else {
             console.log("[Engram][ChatGPT] fresh snapshot soft timeout; using cached/dom result");
+            _dbg("fresh-fetch soft-timeout", { budget: waitBudgetMs, domNodes: domNodeCount });
           }
 
           // Tier 2: page-bridge snapshot (fresh if fetch resolved, cached otherwise)
@@ -710,10 +784,12 @@
               "[Engram][ChatGPT] using data-layer snapshot:",
               `messages=${messages.length}`, `capturedAt=${dataLayerSnapshot.capturedAt || "unknown"}`
             );
+            _dbg("source=data-layer", { msgs: messages.length });
           } else {
-            // Tier 3: visible DOM fallback (incomplete — virtualized messages)
+            // Tier 3: visible DOM fallback (incomplete for virtualized heavy chats)
             messages = extractMessages();
             console.log("[Engram][ChatGPT] no snapshot available; using visible DOM fallback (partial)");
+            _dbg("source=dom-fallback", { msgs: messages.length, domNodes: domNodeCount });
           }
         }
       }
@@ -828,6 +904,7 @@
     if (msg.type !== "ENGRAM_START_SCAN") return;
 
     const scanMode = msg.mode || "interactive";
+    _dbg("ENGRAM_START_SCAN received", { mode: scanMode, url: location.href, chatId: getChatId() });
     const response = Promise.resolve()
       .then(() => performScan(scanMode))
       .then((result) => {
