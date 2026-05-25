@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Engram is an AI chat continuity browser extension for context health, handoff prompts, and migration packages.">
-    <title>Engram - AI Chat Continuity Extension</title>
+    <meta name="description" content="Engram turns scattered AI chats and LinkedIn job-search sessions into portable AI-ready handoff packages for ChatGPT and Claude.">
+    <title>Engram - Context Continuity for AI-Powered Job Search</title>
     <link rel="icon" type="image/png" href="/assets/engram-icon.png">
     <link rel="stylesheet" href="./styles.css">
   </head>
@@ -18,8 +18,10 @@
       </a>
       <nav class="nav-links" aria-label="Page sections">
         <a href="#problem">Problem</a>
-        <a href="#job-workflow">Hackathon</a>
+        <a href="#job-workflow">Job Flow</a>
+        <a href="#demo-flow">Demo</a>
         <a href="#features">Features</a>
+        <a href="#tech-stack">Tech</a>
         <a href="#privacy">Privacy</a>
       </nav>
       <div class="header-links">
@@ -46,13 +48,13 @@
               <span class="popup-gear">&#9881;</span>
             </div>
 
-            <div class="popup-platform">
-              <span class="platform-star">&#9733;</span>
-              <span>Claude.ai</span>
-              <strong>Senior Remote PM Search</strong>
+            <div class="popup-platform platform-chatgpt">
+              <img class="mock-platform-logo" src="/assets/platforms/chatgpt-logo.svg" alt="ChatGPT logo">
+              <span class="mock-platform-label">CHATGPT</span>
+              <strong>Remote role analysis</strong>
             </div>
 
-            <div class="popup-gauge-card">
+            <div class="popup-gauge-card" data-health-score="30">
               <div class="popup-gauge-wrap">
                 <svg class="popup-gauge-svg" viewBox="0 0 200 110" aria-hidden="true">
                   <defs>
@@ -100,7 +102,10 @@
               <div><strong>170</strong><span>CODE</span></div>
             </div>
 
-            <button class="popup-primary" type="button" tabindex="-1">&#11041; Generate Handoff</button>
+            <button class="popup-primary" type="button" tabindex="-1">
+              <img src="/assets/engram-icon.png" alt="" aria-hidden="true">
+              Generate Handoff
+            </button>
 
             <div class="popup-package-card">
               <strong>Migration Package</strong>
@@ -117,26 +122,46 @@
             </div>
           </div>
 
-          <div class="mini-chip">&#11041; Engram &middot; Safe &middot; 4 msgs</div>
+          <div class="mini-chip">
+            <span class="ew-logo"><img class="mock-logo-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true"> Engram</span>
+            <span>&middot;</span>
+            <span>Safe</span>
+            <span>&middot;</span>
+            <span>4 msgs</span>
+          </div>
         </div>
 
         <div class="hero-content">
           <img class="hero-brand-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true">
-          <p class="badge">Hackathon MVP: AI-powered remote job workflow continuity</p>
-          <p class="eyebrow">AI chat continuity extension</p>
+          <p class="badge">AI Hackathon: Scale Without Borders</p>
+          <p class="eyebrow">AI and job-search continuity extension</p>
           <h1 id="hero-title">Engram</h1>
-          <p class="hero-line">Keep the thread. Never lose context.</p>
+          <p class="hero-line">Context continuity for AI-powered job search.</p>
           <p class="hero-copy">
-            Engram keeps long AI workflows alive - starting with remote job search. Monitor context health, generate handoffs, and export migration packages when your chat gets too heavy.
+            Engram helps users carry context across LinkedIn, ChatGPT, and Claude. It turns scattered AI chats and LinkedIn job-search sessions into portable AI-ready handoff packages.
           </p>
           <div class="hero-actions" aria-label="Primary actions">
-            <a class="button button-primary" href="https://github.com/arliking13/engram-extension" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+            <a class="button button-primary" href="#demo-flow">Watch Demo</a>
+            <a class="button button-ghost" href="https://github.com/arliking13/engram-extension" target="_blank" rel="noopener noreferrer">View GitHub</a>
             <a class="button button-secondary" href="#install">Local install guide</a>
           </div>
+          <div class="compatible-row" aria-label="Continuity surfaces">
+            <span class="compatible-label">Carry context across</span>
+            <span class="platform-chip">
+              <img src="/assets/platforms/chatgpt-logo.svg" alt="ChatGPT logo">
+              ChatGPT
+            </span>
+            <span class="platform-chip">
+              <img src="/assets/platforms/claude-logo.svg" alt="Claude logo">
+              Claude.ai
+            </span>
+            <span class="platform-chip">LinkedIn Jobs source</span>
+          </div>
           <div class="support-note">
-            <span>Claude.ai MVP</span>
-            <span>Local-first</span>
-            <span>ZIP handoff</span>
+            <span>Built for newcomer job search</span>
+            <span>ChatGPT + Claude continuity</span>
+            <span>LinkedIn Jobs source</span>
+            <span>Local-first ZIP exports</span>
           </div>
           <div class="creator-links" aria-label="Creator links">
             <span>Built by Temirlan Rashid</span>
@@ -147,68 +172,100 @@
         </div>
       </section>
 
+      <section class="section hackathon-fit-section" id="hackathon-fit" aria-labelledby="hackathon-fit-title">
+        <div class="section-heading split">
+          <div>
+            <p class="eyebrow">Hackathon fit</p>
+            <h2 id="hackathon-fit-title">Built for Scale Without Borders.</h2>
+          </div>
+          <p>Newcomers often use AI to understand job posts, tailor applications, compare roles, and prepare for interviews. Engram connects that work to saved LinkedIn jobs, then packages the context so users can continue in ChatGPT or Claude without rebuilding everything by hand.</p>
+        </div>
+        <div class="submission-grid">
+          <article class="card submission-card">
+            <span>Project</span>
+            <strong>Engram</strong>
+            <p>Context continuity extension for AI-powered job-search workflows.</p>
+          </article>
+          <article class="card submission-card">
+            <span>Team</span>
+            <strong>Temirlan Rashid</strong>
+            <p>Built for Canada's first AI hackathon for immigrants and newcomers in tech.</p>
+          </article>
+          <article class="card submission-card">
+            <span>Category</span>
+            <strong>Machine Learning / AI</strong>
+            <p>Uses AI workflows as the workspace and preserves continuity around them.</p>
+          </article>
+          <article class="card submission-card">
+            <span>Source</span>
+            <strong>Public GitHub</strong>
+            <p><a href="https://github.com/arliking13/engram-extension" target="_blank" rel="noopener noreferrer">github.com/arliking13/engram-extension</a></p>
+          </article>
+        </div>
+      </section>
+
       <section class="section problem-section" id="problem" aria-labelledby="problem-title">
         <div class="section-heading">
-          <p class="eyebrow">The break point</p>
-          <h2 id="problem-title">Long AI chats break momentum.</h2>
-          <p>Useful work piles up inside one fragile session. By the time the chat slows down, the hard part is no longer asking the AI - it is carrying the context forward.</p>
+          <p class="eyebrow">Problem</p>
+          <h2 id="problem-title">AI chats get long. Job-search context gets scattered.</h2>
+          <p>For many newcomers, AI chats become the working surface for decoding job posts, adapting resumes, comparing roles, and preparing applications. At the same time, LinkedIn job details, notes, prompts, and next steps spread across tabs and sessions.</p>
         </div>
         <div class="pain-grid">
           <article class="card pain-card">
             <span>01</span>
-            <h3>Context gets buried</h3>
-            <p>Decisions, constraints, and project state sink under hundreds of messages.</p>
+            <h3>Job search is context-heavy</h3>
+            <p>Each role has requirements, responsibilities, salary signals, visa context, resume notes, and fit questions.</p>
           </article>
           <article class="card pain-card">
             <span>02</span>
-            <h3>Browser sessions slow down</h3>
-            <p>Heavy pages make continuing the same workflow feel risky and brittle.</p>
+            <h3>AI chats become too long</h3>
+            <p>Prompts, reasoning, job notes, interview prep, and application decisions accumulate until the thread becomes hard to trust.</p>
           </article>
           <article class="card pain-card">
             <span>03</span>
-            <h3>Files and code blocks scatter</h3>
-            <p>Important snippets and attachments drift away from the reasoning that produced them.</p>
+            <h3>LinkedIn sessions scatter</h3>
+            <p>Current jobs, saved roles, descriptions, and fit notes are easy to lose while moving between search pages and AI chats.</p>
           </article>
           <article class="card pain-card">
             <span>04</span>
-            <h3>Fresh chats are painful</h3>
-            <p>Starting over means rebuilding memory by hand, usually under pressure.</p>
+            <h3>Restarting loses momentum</h3>
+            <p>When a chat gets heavy, moving to a fresh AI session usually means rebuilding context by hand.</p>
           </article>
         </div>
         <div class="solution-strip">
-          <strong>Engram turns that messy session into a clean continuation package.</strong>
-          <span>Scan the chat, review health, generate the handoff, export the package, and continue with less friction.</span>
+          <strong>Engram turns scattered work into a clean continuation package.</strong>
+          <span>Detect chat health, generate handoffs, save LinkedIn jobs into an archive, and build AI-ready packages for ChatGPT or Claude.</span>
         </div>
       </section>
 
       <section class="section job-section" id="job-workflow" aria-labelledby="job-title">
         <div class="section-heading split">
           <div>
-            <p class="eyebrow">Hackathon demo use case</p>
-            <h2 id="job-title">Built for AI-powered job search workflows.</h2>
+            <p class="eyebrow">Solution</p>
+            <h2 id="job-title">Two continuity layers, one handoff story.</h2>
           </div>
-          <p>Use AI to compare remote roles, preserve application decisions, carry resume and job notes forward, and continue in a fresh chat when the session gets heavy. This is the demo lens, not the product ceiling.</p>
+          <p>Engram does not replace ChatGPT or Claude. It helps users carry context across LinkedIn, ChatGPT, and Claude by joining AI chat continuity with a LinkedIn-powered job archive.</p>
         </div>
         <div class="use-case-grid">
           <article class="card use-card">
             <span class="icon-dot violet"></span>
-            <h3>Analyze remote roles</h3>
-            <p>Compare job posts, requirements, responsibilities, and fit inside an AI chat.</p>
+            <h3>AI Chat Continuity</h3>
+            <p>Scan ChatGPT and Claude chats, show context health, generate handoffs, and export migration packages.</p>
           </article>
           <article class="card use-card">
             <span class="icon-dot violet"></span>
-            <h3>Preserve application context</h3>
-            <p>Keep role details, notes, prompts, decisions, and reasoning across long sessions.</p>
+            <h3>Job Context Continuity</h3>
+            <p>Use LinkedIn Jobs as a job source, detect the current job, save it, and keep it in a Job Archive.</p>
           </article>
           <article class="card use-card">
             <span class="icon-dot violet"></span>
-            <h3>Move to a fresh chat</h3>
-            <p>When the session gets heavy, export a handoff package and continue cleanly.</p>
+            <h3>Job Queue</h3>
+            <p>Collect roles worth reviewing so the next AI session starts with the jobs and priorities already organized.</p>
           </article>
           <article class="card use-card">
             <span class="icon-dot violet"></span>
-            <h3>Keep files together</h3>
-            <p>Carry resumes, notes, PDFs, or job materials with the migration package.</p>
+            <h3>AI Job Package</h3>
+            <p>Copy an AI prompt or download a ZIP package with job context ready for ChatGPT or Claude.</p>
           </article>
         </div>
       </section>
@@ -221,82 +278,244 @@
         <div class="feature-grid">
           <article class="card feature-card">
             <span class="icon-dot violet"></span>
-            <h3>Chat Health Meter</h3>
+            <h3>Chat Health for ChatGPT / Claude</h3>
             <p>See context risk, browser load, message count, and code density before the chat becomes painful.</p>
           </article>
           <article class="card feature-card">
             <span class="icon-dot blue"></span>
-            <h3>Handoff Generator</h3>
-            <p>Create a continuation prompt that tells the next AI exactly where to resume.</p>
+            <h3>Migration Package</h3>
+            <p>Generate a handoff prompt, full chat export, technical signals, manifest, and optional files.</p>
           </article>
           <article class="card feature-card">
             <span class="icon-dot violet"></span>
-            <h3>Migration Package ZIP</h3>
-            <p>Export handoff notes, full chat, technical signals, manifest, and selected files together.</p>
+            <h3>LinkedIn Job Source</h3>
+            <p>Detect the current LinkedIn job page and capture the role details needed for AI-assisted evaluation.</p>
           </article>
           <article class="card feature-card">
             <span class="icon-dot blue"></span>
-            <h3>Mini Health Widget</h3>
-            <p>Keep a small draggable status chip visible while working inside Claude.</p>
+            <h3>Job Archive</h3>
+            <p>Save jobs locally so role details, notes, and current status are not lost between sessions.</p>
           </article>
-          <article class="card feature-card wide">
+          <article class="card feature-card">
             <span class="icon-dot violet"></span>
-            <h3>Local-first privacy</h3>
-            <p>Core MVP features run locally. Files are user-selected. No backend required.</p>
+            <h3>AI Job Package</h3>
+            <p>Turn saved job context into Copy AI Prompt and Download ZIP outputs for ChatGPT or Claude.</p>
+          </article>
+          <article class="card feature-card">
+            <span class="icon-dot blue"></span>
+            <h3>Local-first exports</h3>
+            <p>Core continuity exports run locally in the browser, with user-selected files included only when chosen.</p>
           </article>
         </div>
       </section>
 
+      <div class="editorial-break">
+        <p>LinkedIn to Engram Job Archive to AI Job Package to ChatGPT or Claude: the demo is a portable context trail, not another chatbot.</p>
+      </div>
+
       <section class="section workflow-section" id="workflow" aria-labelledby="workflow-title">
         <div class="section-heading compact">
-          <p class="eyebrow">How it works</p>
-          <h2 id="workflow-title">From overloaded thread to clean continuation.</h2>
+          <p class="eyebrow">Solution flow</p>
+          <h2 id="workflow-title">From LinkedIn job search to clean AI continuation.</h2>
         </div>
         <ol class="workflow">
           <li>
             <span>01</span>
-            <strong>Scan the chat</strong>
-            <p>Capture visible messages, code blocks, metadata, and title context.</p>
+            <strong>Scan AI chat</strong>
+            <p>Read the current ChatGPT or Claude job-search thread and measure context health locally.</p>
           </li>
           <li>
             <span>02</span>
-            <strong>Review health</strong>
-            <p>Check risk, load, message volume, and handoff readiness.</p>
+            <strong>Generate handoff</strong>
+            <p>Create a continuation prompt and migration package before the session loses momentum.</p>
           </li>
           <li>
             <span>03</span>
-            <strong>Generate handoff</strong>
-            <p>Create a concise continuation prompt for the next AI session.</p>
+            <strong>Save LinkedIn jobs</strong>
+            <p>Use LinkedIn Jobs as the source, detect the current job, and save roles to the Job Archive.</p>
           </li>
           <li>
             <span>04</span>
-            <strong>Export package</strong>
-            <p>Bundle notes, chat data, technical signals, and selected files.</p>
+            <strong>Build AI Job Package</strong>
+            <p>Package archived job details, prompts, and continuity context for the next AI step.</p>
           </li>
           <li>
             <span>05</span>
-            <strong>Continue in a fresh chat</strong>
-            <p>Paste the handoff and resume without reconstructing the whole thread.</p>
+            <strong>Continue in ChatGPT or Claude</strong>
+            <p>Copy the AI prompt or download the ZIP, then continue with preserved job and chat context.</p>
           </li>
         </ol>
       </section>
 
-      <section class="section demo-flow-section" aria-labelledby="demo-flow-title">
+      <section class="section demo-flow-section" id="demo-flow" aria-labelledby="demo-flow-title">
         <div class="section-heading compact">
           <p class="eyebrow">Demo workflow</p>
-          <h2 id="demo-flow-title">Remote job analysis without losing the thread.</h2>
+          <h2 id="demo-flow-title">LinkedIn to AI-ready handoff package.</h2>
         </div>
         <div class="demo-flow">
-          <span>LinkedIn job page</span>
-          <span>Copy AI Prompt</span>
-          <span>Analyze in Claude/GPT</span>
-          <span>Engram preserves the AI session</span>
-          <span>Export handoff/package</span>
-          <span>Continue in fresh chat</span>
+          <span>LinkedIn Jobs</span>
+          <span>Engram Job Archive</span>
+          <span>AI Job Package</span>
+          <span>Copy AI Prompt / Download ZIP</span>
+          <span>ChatGPT or Claude</span>
+        </div>
+        <div class="demo-links card">
+          <div>
+            <strong>Judge demo path</strong>
+            <p>Save a LinkedIn job, build an AI Job Package, scan a ChatGPT or Claude job-search thread, generate a handoff, export the ZIP, and resume in a clean chat.</p>
+          </div>
+          <a class="button button-primary" href="#preview">View product preview</a>
         </div>
       </section>
 
-      <section class="section preview-section" aria-labelledby="preview-title">
+      <section class="section linkedin-flow-section" id="linkedin-workflow" aria-labelledby="linkedin-workflow-title">
+        <div class="section-heading split">
+          <div>
+            <p class="eyebrow">LinkedIn workflow</p>
+            <h2 id="linkedin-workflow-title">From LinkedIn jobs to AI-ready context.</h2>
+          </div>
+          <p>Save roles while browsing LinkedIn, organize them in Engram, and export a structured job package for ChatGPT or Claude.</p>
+        </div>
+        <p class="linkedin-role-note">LinkedIn is a Job Source. ChatGPT and Claude are AI Platforms. Engram carries context between them.</p>
+
+        <div class="linkedin-workflow" aria-label="LinkedIn Jobs to AI package workflow">
+          <article class="linkedin-step">
+            <span>01</span>
+            <strong>Browse LinkedIn Jobs</strong>
+            <p>Engram detects the current job while you browse.</p>
+          </article>
+          <article class="linkedin-step">
+            <span>02</span>
+            <strong>Save the role</strong>
+            <p>Use the LinkedIn Job Source widget to save jobs into Engram.</p>
+          </article>
+          <article class="linkedin-step">
+            <span>03</span>
+            <strong>Open Job Archive</strong>
+            <p>Saved jobs are stored in a dedicated Engram workspace.</p>
+          </article>
+          <article class="linkedin-step">
+            <span>04</span>
+            <strong>Queue jobs for analysis</strong>
+            <p>Select the roles you want to include in your AI package.</p>
+          </article>
+          <article class="linkedin-step">
+            <span>05</span>
+            <strong>Build AI Job Package</strong>
+            <p>Export selected jobs as a prompt or ZIP package.</p>
+          </article>
+          <article class="linkedin-step">
+            <span>06</span>
+            <strong>Continue in AI</strong>
+            <p>Open ChatGPT or Claude and continue with structured job context.</p>
+          </article>
+        </div>
+
+        <div class="job-mock-grid" aria-label="LinkedIn job continuity product mockups">
+          <article class="job-mock-card job-source-mock">
+            <div class="job-mock-header">
+              <span class="popup-logo">
+                <img class="mock-logo-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true">
+                <span>Engram</span>
+              </span>
+              <span>v0.1</span>
+            </div>
+            <div class="job-source-label">LinkedIn Job Source</div>
+            <div class="job-current-card">
+              <span>Current job detected</span>
+              <strong>Full Stack Software Engineer</strong>
+              <p>CanadaVisa &middot; hybrid</p>
+            </div>
+            <div class="job-count-grid">
+              <div><strong>3</strong><span>Saved</span></div>
+              <div><strong>2</strong><span>Queued</span></div>
+            </div>
+            <button type="button" tabindex="-1">Open Job Archive</button>
+            <button class="job-secondary-btn" type="button" tabindex="-1">Build Job Package</button>
+            <button class="job-ghost-btn" type="button" tabindex="-1">Copy AI Prompt</button>
+          </article>
+
+          <article class="job-mock-card floating-job-mock">
+            <div class="floating-pill">
+              <span class="ew-logo"><img class="mock-logo-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true"> Engram</span>
+              <span>&middot;</span>
+              <strong>3 saved</strong>
+            </div>
+            <div class="floating-expanded">
+              <div class="job-widget-head">
+                <strong>Engram</strong>
+                <span>LinkedIn</span>
+              </div>
+              <div class="floating-job-title">
+                <strong>Full Stack Software Engineer</strong>
+                <span>CanadaVisa</span>
+              </div>
+              <div class="floating-actions">
+                <button type="button" tabindex="-1">Saved</button>
+                <button type="button" tabindex="-1">Copy AI Prompt</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="job-mock-card archive-mock">
+            <div class="archive-head">
+              <div>
+                <span>Job workspace</span>
+                <strong>Engram Job Archive</strong>
+              </div>
+              <em>2 queued</em>
+            </div>
+            <div class="archive-list">
+              <label class="archive-row selected">
+                <input type="checkbox" checked tabindex="-1">
+                <span>
+                  <strong>Full Stack Software Engineer</strong>
+                  <small>CanadaVisa &middot; hybrid</small>
+                </span>
+                <b>Queued</b>
+              </label>
+              <label class="archive-row selected">
+                <input type="checkbox" checked tabindex="-1">
+                <span>
+                  <strong>Product Operations Analyst</strong>
+                  <small>Remote-first startup &middot; remote</small>
+                </span>
+                <b>Queued</b>
+              </label>
+              <label class="archive-row">
+                <input type="checkbox" tabindex="-1">
+                <span>
+                  <strong>Junior Backend Developer</strong>
+                  <small>Fintech team &middot; onsite</small>
+                </span>
+                <b>Saved</b>
+              </label>
+            </div>
+            <div class="archive-actions">
+              <button type="button" tabindex="-1">Copy AI Prompt</button>
+              <button type="button" tabindex="-1">Download ZIP</button>
+            </div>
+            <div class="ai-shortcuts">
+              <span>Continue in ChatGPT</span>
+              <span>Continue in Claude</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="mvp-includes card">
+          <strong>Current MVP includes</strong>
+          <div>
+            <span>Scan needed / Scanning / final health</span>
+            <span>ChatGPT / Claude handoff packages</span>
+            <span>LinkedIn Job Source widget</span>
+            <span>Job Archive and queue</span>
+            <span>AI Job Package export</span>
+            <span>Copy prompt / Download ZIP</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section preview-section" id="preview" aria-labelledby="preview-title">
         <div class="section-heading">
           <p class="eyebrow">Product preview</p>
           <h2 id="preview-title">A compact extension UI for high-context work.</h2>
@@ -312,12 +531,12 @@
                 <span class="popup-version">v0.1</span>
                 <span class="popup-gear">&#9881;</span>
               </div>
-              <div class="popup-platform compact">
-                <span class="platform-star">&#9733;</span>
-                <span>Claude.ai</span>
+              <div class="popup-platform compact platform-chatgpt">
+                <img class="mock-platform-logo" src="/assets/platforms/chatgpt-logo.svg" alt="ChatGPT logo">
+                <span class="mock-platform-label">CHATGPT</span>
                 <strong>Remote role analysis</strong>
               </div>
-              <div class="popup-gauge-card compact">
+              <div class="popup-gauge-card compact" data-health-score="30">
                 <div class="popup-gauge-wrap small">
                   <svg class="popup-gauge-svg" viewBox="0 0 200 110" aria-hidden="true">
                     <path d="M 15 100 A 85 85 0 0 1 185 100" fill="none" stroke="#1e1e1e" stroke-width="18" stroke-linecap="round"></path>
@@ -337,13 +556,33 @@
                 </div>
                 <strong class="popup-status">Risky</strong>
               </div>
+              <div class="popup-health-panel compact">
+                <div><span>Migration Risk</span><strong>Critical</strong></div>
+                <div><span>Browser Load</span><strong>Very Heavy</strong></div>
+                <p>Export a handoff package before continuing.</p>
+              </div>
               <div class="popup-stats">
                 <div><strong>169</strong><span>YOU</span></div>
                 <div><strong>195</strong><span>AI</span></div>
                 <div><strong>364</strong><span>TOTAL</span></div>
                 <div><strong>170</strong><span>CODE</span></div>
               </div>
-              <button class="popup-primary" type="button" tabindex="-1">&#11041; Generate Handoff</button>
+              <button class="popup-primary" type="button" tabindex="-1">
+                <img src="/assets/engram-icon.png" alt="" aria-hidden="true">
+                Generate Handoff
+              </button>
+              <div class="popup-package-card">
+                <strong>Migration Package</strong>
+                <span>ZIP with handoff, full chat, signals, and optional files.</span>
+                <div>
+                  <button type="button" tabindex="-1">Download ZIP</button>
+                  <button type="button" tabindex="-1">ZIP + Add Files</button>
+                </div>
+              </div>
+              <div class="popup-secondary-actions">
+                <button type="button" tabindex="-1">Export Chat</button>
+                <button type="button" tabindex="-1">Clear</button>
+              </div>
             </div>
             <div>
               <h3>Popup health dashboard</h3>
@@ -351,9 +590,9 @@
             </div>
           </article>
           <article class="preview-card card">
-            <div class="mock-package real-package">
+            <div class="popup-package-card standalone-package">
               <strong>Migration Package</strong>
-              <p>ZIP with handoff, full chat, signals, and optional files.</p>
+              <span>ZIP with handoff, full chat, signals, and optional files.</span>
               <div>
                 <button type="button" tabindex="-1">Download ZIP</button>
                 <button type="button" tabindex="-1">ZIP + Add Files</button>
@@ -362,9 +601,27 @@
             <h3>Migration package export</h3>
           </article>
           <article class="preview-card card">
+            <div class="settings-preview">
+              <div class="settings-preview-head">Settings</div>
+              <div class="settings-preview-row">
+                <span><img src="/assets/platforms/chatgpt-logo.svg" alt="" aria-hidden="true"> ChatGPT</span>
+                <strong>Active</strong>
+              </div>
+              <div class="settings-preview-row">
+                <span><img src="/assets/platforms/claude-logo.svg" alt="" aria-hidden="true"> Claude.ai</span>
+                <strong class="available">Available</strong>
+              </div>
+              <div class="settings-preview-row muted">
+                <span>Show mini health widget</span>
+                <strong>On</strong>
+              </div>
+            </div>
+            <h3>Settings platform support</h3>
+          </article>
+          <article class="preview-card card">
             <div class="mini-widget-preview">
               <div class="ew-row-compact">
-                <span class="ew-logo">&#11041; Engram</span>
+                <span class="ew-logo"><img class="mock-logo-icon" src="/assets/engram-icon.png" alt="" aria-hidden="true"> Engram</span>
                 <span class="ew-dot">&middot;</span>
                 <span class="ew-badge">Safe</span>
                 <span class="ew-dot">&middot;</span>
@@ -387,10 +644,10 @@
               </div>
               <p>LinkedIn job page detected</p>
               <button type="button" tabindex="-1">Save Job</button>
-              <button type="button" tabindex="-1">Copy AI Prompt</button>
-              <small>Prompt bridge for AI analysis</small>
+              <button type="button" tabindex="-1">Build AI Job Package</button>
+              <small>Copy AI Prompt / Download ZIP</small>
             </div>
-            <h3>LinkedIn prompt bridge</h3>
+            <h3>LinkedIn Job Source</h3>
           </article>
         </div>
       </section>
@@ -402,8 +659,8 @@
             <h2 id="privacy-title">Local-first by default.</h2>
           </div>
           <div>
-            <p>Engram does not need a backend for its core MVP workflow. Chat scans, handoffs, ZIP packages, and user-selected files are handled locally in the browser.</p>
-            <p>For broader product use, backend-assisted AI features can be added later, but the MVP continuity flow is local-first.</p>
+            <p>Engram does not need a backend for its core continuity workflow. Chat scans, saved jobs, handoffs, ZIP packages, and user-selected files are handled locally in the browser.</p>
+            <p>If backend-assisted AI is connected for the demo, it is presented as the Engram demo backend while the default continuity flow remains local-first.</p>
           </div>
         </div>
       </section>
@@ -412,9 +669,69 @@
         <div class="platform-card card">
           <div>
             <p class="eyebrow">Platform support</p>
-            <h2 id="platform-title">MVP support: Claude.ai</h2>
+            <h2 id="platform-title">ChatGPT, Claude, and LinkedIn each play a different role.</h2>
           </div>
-          <p>More AI platforms can be added through platform parsers. The architecture is built around capture, health, and handoff, not a single chat provider.</p>
+          <div class="platform-card-body">
+            <p>ChatGPT and Claude are supported AI chat surfaces for context health and handoff generation. LinkedIn Jobs is a job source for detected current jobs, saved roles, the Job Archive, and AI Job Packages.</p>
+            <div class="platform-support-list" aria-label="Supported platforms">
+              <span class="platform-chip">
+                <img src="/assets/platforms/chatgpt-logo.svg" alt="ChatGPT logo">
+                ChatGPT
+              </span>
+              <span class="platform-chip">
+                <img src="/assets/platforms/claude-logo.svg" alt="Claude logo">
+                Claude.ai
+              </span>
+            </div>
+            <p class="platform-disclaimer">ChatGPT and OpenAI are trademarks of OpenAI. Claude and Anthropic are trademarks of Anthropic. Engram is not affiliated with or endorsed by OpenAI or Anthropic.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section tech-section" id="tech-stack" aria-labelledby="tech-title">
+        <div class="section-heading">
+          <p class="eyebrow">Technologies & AI tools</p>
+          <h2 id="tech-title">Built as a browser extension MVP.</h2>
+          <p>The prototype combines platform-specific chat parsers, LinkedIn job capture, local browser storage, context-health scoring, and static deployment for a judge-friendly demo.</p>
+        </div>
+        <div class="tech-grid">
+          <article class="card tech-card"><span>Extension</span><strong>Browser extension</strong><p>Manifest V3 structure for Chrome/Firefox-style extension APIs.</p></article>
+          <article class="card tech-card"><span>Language</span><strong>JavaScript</strong><p>Popup UI, content scripts, chat parsers, LinkedIn job capture, and local export logic.</p></article>
+          <article class="card tech-card"><span>AI chats</span><strong>ChatGPT + Claude parsers</strong><p>Platform-specific extraction paths for supported AI chat pages.</p></article>
+          <article class="card tech-card"><span>Jobs</span><strong>LinkedIn Jobs source</strong><p>Detected current job, Save Job, Job Archive, Job Queue, and AI Job Package workflow.</p></article>
+          <article class="card tech-card"><span>Storage</span><strong>Local/session storage</strong><p>Health snapshots, saved jobs, and captured data stay local to the browser for the MVP workflow.</p></article>
+          <article class="card tech-card"><span>Export</span><strong>ZIP handoff packages</strong><p>Generates migration package and AI Job Package ZIP outputs for cross-tool continuation.</p></article>
+          <article class="card tech-card"><span>Demo</span><strong>Vercel marketing site</strong><p>Static judge-facing page with extension previews, project context, and install links.</p></article>
+          <article class="card tech-card wide"><span>AI handoff</span><strong>Optional Engram demo backend</strong><p>The extension includes an Engram demo backend path for AI-assisted handoff generation when connected, while the core handoff/export flow remains local-first.</p></article>
+        </div>
+      </section>
+
+      <section class="section criteria-section" aria-labelledby="criteria-title">
+        <div class="section-heading">
+          <p class="eyebrow">Judging criteria fit</p>
+          <h2 id="criteria-title">Why this fits the judging criteria.</h2>
+        </div>
+        <div class="criteria-grid">
+          <article class="card criteria-card">
+            <span>25%</span>
+            <h3>Impact</h3>
+            <p>Supports a practical newcomer job-search workflow where AI analysis, saved jobs, and next steps stay portable.</p>
+          </article>
+          <article class="card criteria-card">
+            <span>25%</span>
+            <h3>Technical execution</h3>
+            <p>Combines chat parsers, LinkedIn job detection, local storage, health scoring, export packages, and popup UI.</p>
+          </article>
+          <article class="card criteria-card">
+            <span>25%</span>
+            <h3>Creativity</h3>
+            <p>Treats cross-tool context continuity as workflow infrastructure, not another chatbot or job board.</p>
+          </article>
+          <article class="card criteria-card">
+            <span>25%</span>
+            <h3>Demo clarity</h3>
+            <p>Shows LinkedIn -> Job Archive -> AI Job Package -> ChatGPT or Claude with responsible local-first handling.</p>
+          </article>
         </div>
       </section>
 
@@ -423,7 +740,7 @@
           <div>
             <p class="eyebrow">Try the MVP</p>
             <h2 id="install-title">Try Engram locally.</h2>
-            <p>Clone the repo, load the extension folder in Firefox, and test the Claude.ai continuity workflow.</p>
+            <p>Clone the repo, load the extension folder in Firefox, and test the LinkedIn to ChatGPT or Claude continuity workflow.</p>
             <div class="built-by">
               <span>Built by Temirlan Rashid</span>
               <a href="https://www.linkedin.com/in/temirlan-rashid" target="_blank" rel="noopener noreferrer">LinkedIn</a>
@@ -452,6 +769,7 @@
         <a href="https://www.linkedin.com/in/temirlan-rashid" target="_blank" rel="noopener noreferrer">LinkedIn</a>
         <a href="https://devpost.com/temirlanrashid" target="_blank" rel="noopener noreferrer">Devpost</a>
       </nav>
+      <p class="footer-disclaimer">ChatGPT and OpenAI are trademarks of OpenAI. Claude and Anthropic are trademarks of Anthropic. Engram is not affiliated with or endorsed by OpenAI or Anthropic.</p>
     </footer>
 
     <script src="./main.js" defer></script>

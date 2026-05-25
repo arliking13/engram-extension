@@ -2,6 +2,41 @@ const root = document.documentElement;
 const cards = document.querySelectorAll("[data-tilt]");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
+const HEALTH_BANDS = [
+  { min: 90, label: "Safe", color: "#22c55e" },
+  { min: 75, label: "Good", color: "#84cc16" },
+  { min: 50, label: "Fair", color: "#f59e0b" },
+  { min: 25, label: "Risky", color: "#f97316" },
+  { min: 0, label: "Critical", color: "#ef4444" },
+];
+
+function clampHealthScore(score) {
+  return Math.max(0, Math.min(100, Number(score) || 0));
+}
+
+function healthFromScore(score) {
+  const normalized = clampHealthScore(score);
+  return HEALTH_BANDS.find((band) => normalized >= band.min) || HEALTH_BANDS[HEALTH_BANDS.length - 1];
+}
+
+function needleAngleFromScore(score) {
+  return -90 + (clampHealthScore(score) / 100) * 180;
+}
+
+document.querySelectorAll("[data-health-score]").forEach((card) => {
+  const score = Number(card.dataset.healthScore || 0);
+  const angle = needleAngleFromScore(score);
+  const health = healthFromScore(score);
+  const needle = card.querySelector(".mock-needle");
+  const status = card.querySelector(".popup-status");
+
+  card.style.setProperty("--needle-angle", `${angle}deg`);
+  card.style.setProperty("--needle-start-angle", `${angle - 26}deg`);
+  card.style.setProperty("--health-color", health.color);
+  if (needle) needle.style.transform = `rotate(${angle}deg)`;
+  if (status) status.textContent = health.label;
+});
+
 if (!reducedMotion.matches) {
   window.addEventListener("pointermove", (event) => {
     const x = event.clientX / window.innerWidth - 0.5;
@@ -27,7 +62,7 @@ if (!reducedMotion.matches) {
 }
 
 const revealItems = document.querySelectorAll(
-  ".section-heading, .card, .solution-strip, .workflow li, .demo-flow span, .privacy-card, .platform-card, .cta-panel"
+  ".section-heading, .card, .solution-strip, .workflow li, .demo-flow span, .linkedin-step, .job-mock-card, .privacy-card, .platform-card, .cta-panel"
 );
 
 revealItems.forEach((item, index) => {
