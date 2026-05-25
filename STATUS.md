@@ -54,6 +54,15 @@ Engram is a browser extension MVP for preserving continuity across long AI-assis
 
 ## Last Code Change
 
+- Reframed the marketing site copy around the current two-layer MVP architecture: AI Chat Continuity for ChatGPT/Claude and Job Context Continuity for LinkedIn Jobs.
+- Updated the hero, problem, solution, feature cards, demo flow, platform-support copy, privacy/backend wording, tech stack, and judging-fit sections to tell the clear flow: LinkedIn Jobs -> Engram Job Archive -> AI Job Package -> ChatGPT or Claude.
+- Added visible marketing copy for LinkedIn Jobs as a job source, detected current job, Save Job, Job Archive, Job Queue, AI Job Package, Copy AI Prompt, Download ZIP, local-first exports, and the Engram demo backend wording.
+- Removed/avoided stale site positioning that could imply LinkedIn is an AI platform, expose Gemini as a visible platform, or say Engram replaces ChatGPT/Claude.
+- Rebuilt `site/dist` with `npm.cmd --prefix .\site run build`; `site/dist` is not tracked by Git, but the generated output contains the updated copy.
+- Verification passed: `npm.cmd --prefix .\site run build` and `git diff --check` with only existing Git config/CRLF warnings.
+- No extension files, parser logic, LinkedIn extension runtime logic, popup code, background worker code, health scoring, handoff generation, or ZIP writer behavior were changed in this pass.
+- No new durable decision was made for this site copy alignment pass.
+
 - Verified the production-site mismatch: local `site/src` and `site/dist` had the updated judge-facing content, while `https://engram-blush-tau.vercel.app/` was still serving the older deployment.
 - Confirmed the Vercel project link lives under `site/.vercel/project.json` (`projectName: engram`); the repository root has no `.vercel/project.json`.
 - Deployed from `site/` with `vercel --prod`; Vercel reported deployment `dpl_DLnHYk4x7A8hxx9ASroWmhp6nb69` ready and aliased to `https://engram-blush-tau.vercel.app`.

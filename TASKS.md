@@ -111,6 +111,9 @@ Ship a demoable Engram extension flow:
 - [x] Add landing page Settings/platform support preview matching the current extension platform badge behavior.
 - [x] Remove duplicate hero local-first chip and unused older migration package mock CSS.
 - [x] Add OpenAI/Anthropic non-affiliation disclaimer to the footer.
+- [x] Reframe the marketing site around the current two-layer MVP: ChatGPT/Claude AI Chat Continuity plus LinkedIn Job Context Continuity.
+- [x] Update the public demo story to LinkedIn Jobs -> Engram Job Archive -> AI Job Package -> ChatGPT or Claude.
+- [x] Remove stale visible site wording that could expose Gemini, call LinkedIn an AI platform, or imply Engram replaces ChatGPT/Claude.
 
 ## In Progress
 
